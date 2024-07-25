@@ -1,0 +1,44 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35027.167
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BunnyBracelet", "BunnyBracelet\BunnyBracelet.csproj", "{6C97DA9F-2B59-4757-9860-2110C0D85D34}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8E1A861B-F3C9-46D2-8DEB-06C49888B8E7}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+		Directory.Build.props = Directory.Build.props
+		Directory.Packages.props = Directory.Packages.props
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BunnyBracelet.Tests", "BunnyBracelet.Tests\BunnyBracelet.Tests.csproj", "{FB581F6F-4EEA-4A74-9E23-AE7E7F77D9DF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BunnyBracelet.SystemTests", "BunnyBracelet.SystemTests\BunnyBracelet.SystemTests.csproj", "{5BCA055E-22A7-4F8A-B71C-27926C4E4C86}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6C97DA9F-2B59-4757-9860-2110C0D85D34}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C97DA9F-2B59-4757-9860-2110C0D85D34}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C97DA9F-2B59-4757-9860-2110C0D85D34}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C97DA9F-2B59-4757-9860-2110C0D85D34}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB581F6F-4EEA-4A74-9E23-AE7E7F77D9DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB581F6F-4EEA-4A74-9E23-AE7E7F77D9DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB581F6F-4EEA-4A74-9E23-AE7E7F77D9DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB581F6F-4EEA-4A74-9E23-AE7E7F77D9DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5BCA055E-22A7-4F8A-B71C-27926C4E4C86}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5BCA055E-22A7-4F8A-B71C-27926C4E4C86}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5BCA055E-22A7-4F8A-B71C-27926C4E4C86}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5BCA055E-22A7-4F8A-B71C-27926C4E4C86}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B35481EF-8AD9-4C7D-8B06-3A478A7D5A12}
+	EndGlobalSection
+EndGlobal
