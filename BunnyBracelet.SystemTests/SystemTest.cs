@@ -1,4 +1,5 @@
-﻿using RabbitMQ.Client;
+﻿using System.Diagnostics;
+using RabbitMQ.Client;
 
 namespace BunnyBracelet.SystemTests;
 
@@ -7,6 +8,7 @@ public class SystemTest
 {
     private const string InboundExchange = "test-inbound";
     private const string OutboundExchange = "test-outbound";
+    private const string OutputSeparator = "----------\r\n";
 
     [TestMethod]
     public async Task SendMessageBetween2RabbitMQInstances()
@@ -60,12 +62,11 @@ public class SystemTest
         }
         finally
         {
-            Console.WriteLine("Bunny1");
-            Console.WriteLine(bunny1.GetOutput());
-            Console.WriteLine();
-            Console.WriteLine("Bunny2");
-            Console.WriteLine(bunny2.GetOutput());
-            Console.WriteLine();
+            Trace.WriteLine("Bunny1");
+            Trace.WriteLine(bunny1.GetOutput());
+            Trace.WriteLine(OutputSeparator);
+            Trace.WriteLine("Bunny2");
+            Trace.WriteLine(bunny2.GetOutput());
         }
     }
 }

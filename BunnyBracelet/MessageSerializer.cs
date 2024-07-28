@@ -108,6 +108,10 @@ public class MessageSerializer : IMessageSerializer
 
             return new Message(state.Body, state.Properties);
         }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            throw new MessageException("Unexpected end of stream.", ex);
+        }
         finally
         {
             await reader.CompleteAsync();
@@ -216,12 +220,20 @@ public class MessageSerializer : IMessageSerializer
 
     private static async ValueTask<string> ReadString(PipeReader reader)
     {
+        const byte nullTerminator = 0;
+
         var readResult = await reader.ReadAtLeastAsync(4);
         var stringLength = GetStringLength(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(4).Start);
 
         readResult = await reader.ReadAtLeastAsync(stringLength);
-        var result = TextEncoding.GetString(readResult.Buffer.Slice(0, stringLength));
+        var stringBuffer = readResult.Buffer.Slice(0, stringLength);
+        if (stringBuffer.PositionOf(nullTerminator).HasValue)
+        {
+            throw new MessageException("A string inside the message contains unallowed null terminator character (0).");
+        }
+
+        var result = TextEncoding.GetString(stringBuffer);
         reader.AdvanceTo(readResult.Buffer.Slice(stringLength).Start);
         return result;
 
@@ -460,11 +472,8 @@ public class MessageSerializer : IMessageSerializer
         buffer[1] = code;
         buffer = buffer.Slice(2);
 
-        BinaryPrimitives.WriteInt32LittleEndian(buffer, value.Length);
-        buffer = buffer.Slice(4);
-
-        var bytesCount = TextEncoding.GetBytes(value, buffer);
-        writer.Advance(2 + 4 + bytesCount);
+        var bytesCount = WriteString(value, buffer);
+        writer.Advance(2 + bytesCount);
     }
 
     private static void WriteProperty(PipeWriter writer, byte code, bool value)
@@ -528,30 +537,21 @@ public class MessageSerializer : IMessageSerializer
 
         if (value.ExchangeType is not null)
         {
-            BinaryPrimitives.WriteInt32LittleEndian(buffer, value.ExchangeType.Length);
-            buffer = buffer.Slice(4);
-            bytesCount += 4;
-            var stringBytesCount = TextEncoding.GetBytes(value.ExchangeType, buffer);
+            var stringBytesCount = WriteString(value.ExchangeType, buffer);
             buffer = buffer.Slice(stringBytesCount);
             bytesCount += stringBytesCount;
         }
 
         if (value.ExchangeName is not null)
         {
-            BinaryPrimitives.WriteInt32LittleEndian(buffer, value.ExchangeName.Length);
-            buffer = buffer.Slice(4);
-            bytesCount += 4;
-            var stringBytesCount = TextEncoding.GetBytes(value.ExchangeName, buffer);
+            var stringBytesCount = WriteString(value.ExchangeName, buffer);
             buffer = buffer.Slice(stringBytesCount);
             bytesCount += stringBytesCount;
         }
 
         if (value.RoutingKey is not null)
         {
-            BinaryPrimitives.WriteInt32LittleEndian(buffer, value.RoutingKey.Length);
-            buffer = buffer.Slice(4);
-            bytesCount += 4;
-            var stringBytesCount = TextEncoding.GetBytes(value.RoutingKey, buffer);
+            var stringBytesCount = WriteString(value.RoutingKey, buffer);
             buffer = buffer.Slice(stringBytesCount);
             bytesCount += stringBytesCount;
         }
@@ -577,16 +577,15 @@ public class MessageSerializer : IMessageSerializer
         buffer[0] = Codes.Header;
         buffer = buffer.Slice(1);
 
-        BinaryPrimitives.WriteInt32LittleEndian(buffer, key.Length);
-        buffer = buffer.Slice(4);
-        var bytesCount = TextEncoding.GetBytes(key, buffer);
+        var bytesCount = WriteString(key, buffer);
         buffer = buffer.Slice(bytesCount);
 
         BinaryPrimitives.WriteInt32LittleEndian(buffer, valueBytes.Length);
         buffer = buffer.Slice(4);
         valueBytes.CopyTo(buffer);
 
-        writer.Advance(9 + bytesCount + valueBytes.Length);
+        // 4 bytes of string length is counted in bytesCount
+        writer.Advance(5 + bytesCount + valueBytes.Length);
     }
 
     private static void WriteBody(PipeWriter writer, ReadOnlyMemory<byte> body)
@@ -605,6 +604,14 @@ public class MessageSerializer : IMessageSerializer
         var buffer = writer.GetSpan(1);
         buffer[0] = Codes.EndOfMesage;
         writer.Advance(1);
+    }
+
+    private static int WriteString(string value, Span<byte> buffer)
+    {
+        var lengthBuffer = buffer.Slice(0, 4);
+        var bytesCount = TextEncoding.GetBytes(value, buffer.Slice(4));
+        BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, bytesCount);
+        return bytesCount + 4;
     }
 
     #endregion

@@ -2,7 +2,9 @@
 
 public class RabbitOptions
 {
-    public Uri? RabbitMQUri { get; set; }
+    private static readonly Uri DefaultRabbitMQUri = new Uri("ampq://localhost/");
+
+    public Uri RabbitMQUri { get; set; } = DefaultRabbitMQUri;
 
     public string? InboundExchange { get; set; }
 

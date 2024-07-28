@@ -150,7 +150,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
     {
         lock (outputLock)
         {
-            output.Append(e.Data);
+            output.AppendLine(e.Data);
         }
     }
 
@@ -158,7 +158,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
     {
         lock (outputLock)
         {
-            output.Append(e.Data);
+            output.AppendLine(e.Data);
         }
     }
 
