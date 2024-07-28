@@ -10,8 +10,10 @@ public sealed class RabbitService : IDisposable
     private readonly IOptions<RabbitOptions> options;
     private readonly ILogger<RabbitService> logger;
 
-    private readonly Lazy<IConnection> connection;
-    private readonly Lazy<IModel> sendChannel;
+    // Lazy<T> cannot be used, because it caches exception.
+    private readonly object connectionLock = new object();
+    private IConnection? connectionStore;
+    private IModel? sendChannelStore;
     private bool disposed;
     private volatile bool disposing;
 
@@ -19,25 +21,66 @@ public sealed class RabbitService : IDisposable
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
-
         this.options = options;
         this.logger = logger;
-        connection = new Lazy<IConnection>(CreateConnection);
-        sendChannel = new Lazy<IModel>(CreateSendChannel);
+    }
+
+    private IConnection Connection
+    {
+        get
+        {
+            if (connectionStore is null)
+            {
+                lock (connectionLock)
+                {
+                    if (connectionStore is null)
+                    {
+                        connectionStore = CreateConnection();
+                    }
+                }
+            }
+
+            return connectionStore;
+        }
+    }
+
+    private IModel SendChannel
+    {
+        get
+        {
+            // Ensure that connection is opened.
+            var connection = Connection;
+
+            if (sendChannelStore is null)
+            {
+                lock (connectionLock)
+                {
+                    if (sendChannelStore is null)
+                    {
+                        sendChannelStore = CreateSendChannel(connection);
+                    }
+                }
+            }
+
+            return sendChannelStore;
+        }
     }
 
     public void SendMessage(Message message)
     {
         CheckDisposed();
 
-        var exchange = options.Value.InboundExchange!;
+        var exchange = options.Value.InboundExchange?.Name;
+        if (string.IsNullOrEmpty(exchange))
+        {
+            throw new InvalidOperationException("Inbound exchange must be specified.");
+        }
+
         logger.PublishingMessage(exchange, message.Properties, message.Body.Length);
 
         try
         {
-            // Ensure that connection is opened;
-            _ = connection.Value;
-            sendChannel.Value.BasicPublish(options.Value.InboundExchange, string.Empty, message.Properties, message.Body);
+            SendChannel.BasicPublish(exchange, string.Empty, message.Properties, message.Body);
             logger.MessagePublished(exchange, message.Properties, message.Body.Length);
         }
         catch (Exception ex)
@@ -51,31 +94,35 @@ public sealed class RabbitService : IDisposable
     {
         CheckDisposed();
 
-        // Ensure that connection is opened;
-        _ = connection.Value;
-        return sendChannel.Value.CreateBasicProperties();
+        return SendChannel.CreateBasicProperties();
     }
 
-    public IDisposable ConsumeMessages(Func<Message, Task<ProcessMessageResult>> process)
+    public IDisposable ConsumeMessages(Func<Message, Task<ProcessMessageResult>> process, RabbitQueueOptions? queueOptions)
     {
         ArgumentNullException.ThrowIfNull(process);
         CheckDisposed();
 
-        var exchangeName = options.Value.OutboundExchange;
-        if (string.IsNullOrEmpty(exchangeName))
+        var exchangeOptions = options.Value.OutboundExchange;
+        var exchangeName = exchangeOptions?.Name;
+        if (exchangeOptions is null || string.IsNullOrEmpty(exchangeName))
         {
             throw new InvalidOperationException("Outbound Exchange must be specified.");
         }
 
         logger.InitializingConsumer(exchangeName);
 
-        var channel = connection.Value.CreateModel();
+        var channel = Connection.CreateModel();
         try
         {
-            channel.ExchangeDeclare(exchangeName, ExchangeType.Fanout);
-            logger.ExchangeInitialized(exchangeName, ExchangeType.Fanout);
+            channel.ExchangeDeclare(
+                exchangeName,
+                exchangeOptions.Type,
+                exchangeOptions.Durable,
+                exchangeOptions.AutoDelete,
+                exchangeOptions.Arguments);
+            logger.ExchangeInitialized(exchangeName, exchangeOptions.Type, exchangeOptions.Durable);
 
-            var messageConsumer = new MessageConsumer(channel, exchangeName, process, logger);
+            var messageConsumer = new MessageConsumer(channel, process, exchangeName, queueOptions, logger);
             messageConsumer.Initialize();
             return messageConsumer;
         }
@@ -94,10 +141,15 @@ public sealed class RabbitService : IDisposable
         {
             disposing = true;
 
-            if (connection.IsValueCreated)
+            if (connectionStore is not null)
             {
-                connection.Value.Close();
-                connection.Value.Dispose();
+                connectionStore.Close();
+                connectionStore.Dispose();
+            }
+
+            if (sendChannelStore is not null)
+            {
+                sendChannelStore.Dispose();
             }
 
             disposed = true;
@@ -127,14 +179,23 @@ public sealed class RabbitService : IDisposable
         return connection;
     }
 
-    private IModel CreateSendChannel()
+    private IModel CreateSendChannel(IConnection connection)
     {
         ObjectDisposedException.ThrowIf(disposing, this);
 
-        var exchangeName = options.Value.InboundExchange!;
-        var channel = connection.Value.CreateModel();
-        channel.ExchangeDeclare(exchangeName, ExchangeType.Fanout);
-        logger.ExchangeInitialized(exchangeName, ExchangeType.Fanout);
+        var exchangeOptions = options.Value.InboundExchange;
+        System.Diagnostics.Debug.Assert(exchangeOptions is not null, "Inbound Exchange is not specified.");
+        var exchangeName = exchangeOptions.Name;
+        System.Diagnostics.Debug.Assert(!string.IsNullOrEmpty(exchangeName), "Inbound Exchange name is not specified.");
+
+        var channel = connection.CreateModel();
+        channel.ExchangeDeclare(
+            exchangeName,
+            exchangeOptions.Type,
+            exchangeOptions.Durable,
+            exchangeOptions.AutoDelete,
+            exchangeOptions.Arguments);
+        logger.ExchangeInitialized(exchangeName, exchangeOptions.Type, exchangeOptions.Durable);
         return channel;
     }
 
@@ -151,8 +212,9 @@ public sealed class RabbitService : IDisposable
     private sealed class MessageConsumer : IDisposable
     {
         private readonly IModel channel;
-        private readonly string exchangeName;
         private readonly Func<Message, Task<ProcessMessageResult>> process;
+        private readonly string exchangeName;
+        private readonly RabbitQueueOptions? queueOptions;
         private readonly ILogger<RabbitService> logger;
 
         private bool disposed;
@@ -161,21 +223,28 @@ public sealed class RabbitService : IDisposable
 
         public MessageConsumer(
             IModel channel,
-            string exchangeName,
             Func<Message, Task<ProcessMessageResult>> process,
+            string exchangeName,
+            RabbitQueueOptions? queueOptions,
             ILogger<RabbitService> logger)
         {
             this.channel = channel;
-            this.exchangeName = exchangeName;
             this.process = process;
+            this.exchangeName = exchangeName;
+            this.queueOptions = queueOptions;
             this.logger = logger;
         }
 
         public void Initialize()
         {
-            var queue = channel.QueueDeclare();
+            var queue = channel.QueueDeclare(
+                queueOptions?.Name ?? string.Empty,
+                queueOptions?.Durable ?? false,
+                true,
+                queueOptions?.AutoDelete ?? true,
+                queueOptions?.Arguments);
             queueName = queue.QueueName;
-            logger.QueueInitialized(queueName);
+            logger.QueueInitialized(queueName, queueOptions?.Durable ?? false);
 
             channel.QueueBind(queueName, exchangeName, string.Empty);
             logger.QueueBound(queueName, exchangeName);
@@ -235,7 +304,7 @@ public sealed class RabbitService : IDisposable
             catch (Exception ex)
             {
                 logger.ErrorConsumingMessage(ex, exchangeName, queueName!, consumerTag!, e.BasicProperties, e.Body.Length);
-                channel.BasicNack(e.DeliveryTag, false, true);
+                channel.BasicNack(e.DeliveryTag, false, !e.Redelivered);
             }
         }
     }

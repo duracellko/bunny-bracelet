@@ -64,15 +64,15 @@ internal static class BunnyBraceletLogger
         new EventId(106, nameof(RelayServiceStopped)),
         "Relay Service stopped.");
 
-    private static readonly Action<ILogger, string, Uri, Exception?> LogRelayEndpointConfigured = LoggerMessage.Define<string, Uri>(
+    private static readonly Action<ILogger, string, string?, Uri, Exception?> LogRelayEndpointConfigured = LoggerMessage.Define<string, string?, Uri>(
         LogLevel.Information,
         new EventId(107, nameof(RelayEndpointConfigured)),
-        "Relay from RabbitMQ exchange '{Exchange}' to endpoint '{Uri}' is setup.");
+        "Relay from RabbitMQ exchange '{Exchange}' and queue '{Queue}' to endpoint '{Uri}' is setup.");
 
-    private static readonly Action<ILogger, string, Uri, Exception?> LogErrorConfiguringRelayEndpoint = LoggerMessage.Define<string, Uri>(
+    private static readonly Action<ILogger, string, string?, Uri, Exception?> LogErrorConfiguringRelayEndpoint = LoggerMessage.Define<string, string?, Uri>(
         LogLevel.Error,
         new EventId(108, nameof(ErrorConfiguringRelayEndpoint)),
-        "Setup of relay from RabbitMQ exchange '{Exchange}' to endpoint '{Uri}' failed.");
+        "Setup of relay from RabbitMQ exchange '{Exchange}' and queue '{Queue}' to endpoint '{Uri}' failed.");
 
     private static readonly Action<ILogger, Exception?> LogMissingOutboundExchange = LoggerMessage.Define(
         LogLevel.Warning,
@@ -144,15 +144,15 @@ internal static class BunnyBraceletLogger
         new EventId(212, nameof(ErrorConsumingMessage)),
         "Consuming message by consumer tag '{ConsumerTag}' from exchange '{Exchange}' and queue '{Queue}' failed. MessageId: {MessageId}, CorrelationId: {CorrelationId}, Size: {Size}");
 
-    private static readonly Action<ILogger, string, string, Exception?> LogExchangeInitialized = LoggerMessage.Define<string, string>(
+    private static readonly Action<ILogger, string, string, bool, Exception?> LogExchangeInitialized = LoggerMessage.Define<string, string, bool>(
         LogLevel.Information,
         new EventId(213, nameof(ExchangeInitialized)),
-        "Exchange '{Exchange}' is initialized. Type: {Type}");
+        "Exchange '{Exchange}' is initialized. Type: {Type}, Durable: {Durable}");
 
-    private static readonly Action<ILogger, string, Exception?> LogQueueInitialized = LoggerMessage.Define<string>(
+    private static readonly Action<ILogger, string, bool, Exception?> LogQueueInitialized = LoggerMessage.Define<string, bool>(
         LogLevel.Information,
         new EventId(214, nameof(QueueInitialized)),
-        "Queue '{Queue}' is initialized.");
+        "Queue '{Queue}' is initialized. Durable: {Durable}");
 
     private static readonly Action<ILogger, string, string, Exception?> LogQueueBound = LoggerMessage.Define<string, string>(
         LogLevel.Information,
@@ -224,14 +224,14 @@ internal static class BunnyBraceletLogger
         LogRelayServiceStopped(logger, null);
     }
 
-    public static void RelayEndpointConfigured(this ILogger logger, Uri uri, string exchange)
+    public static void RelayEndpointConfigured(this ILogger logger, Uri uri, string exchange, string? queue)
     {
-        LogRelayEndpointConfigured(logger, exchange, uri, null);
+        LogRelayEndpointConfigured(logger, exchange, queue, uri, null);
     }
 
-    public static void ErrorConfiguringRelayEndpoint(this ILogger logger, Exception exception, Uri uri, string exchange)
+    public static void ErrorConfiguringRelayEndpoint(this ILogger logger, Exception exception, Uri uri, string exchange, string? queue)
     {
-        LogErrorConfiguringRelayEndpoint(logger, exchange, uri, exception);
+        LogErrorConfiguringRelayEndpoint(logger, exchange, queue, uri, exception);
     }
 
     public static void MissingOutboundExchange(this ILogger logger)
@@ -311,14 +311,14 @@ internal static class BunnyBraceletLogger
         LogErrorConsumingMessage(logger, consumerTag, exchange, queue, properties?.MessageId, properties?.CorrelationId, size, exception);
     }
 
-    public static void ExchangeInitialized(this ILogger logger, string exchange, string type)
+    public static void ExchangeInitialized(this ILogger logger, string exchange, string type, bool durable)
     {
-        LogExchangeInitialized(logger, exchange, type, null);
+        LogExchangeInitialized(logger, exchange, type, durable, null);
     }
 
-    public static void QueueInitialized(this ILogger logger, string queue)
+    public static void QueueInitialized(this ILogger logger, string queue, bool durable)
     {
-        LogQueueInitialized(logger, queue, null);
+        LogQueueInitialized(logger, queue, durable, null);
     }
 
     public static void QueueBound(this ILogger logger, string queue, string exchange)

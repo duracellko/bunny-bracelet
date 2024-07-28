@@ -42,20 +42,26 @@ public class RelayHostedService : IHostedService
     {
         logger.RelayServiceStarting();
 
-        var exchangeName = rabbitOptions.Value.OutboundExchange;
+        var exchangeName = rabbitOptions.Value.OutboundExchange?.Name;
         if (!string.IsNullOrEmpty(exchangeName))
         {
             foreach (var endpoint in options.Value.Endpoints)
             {
-                try
+                var uri = endpoint.Uri;
+                if (uri is not null)
                 {
-                    var consumer = rabbitService.ConsumeMessages(async m => await ProcessMessage(m, endpoint, exchangeName));
-                    consumers.Add(consumer);
-                    logger.RelayEndpointConfigured(endpoint, exchangeName);
-                }
-                catch (Exception ex)
-                {
-                    logger.ErrorConfiguringRelayEndpoint(ex, endpoint, exchangeName);
+                    try
+                    {
+                        var consumer = rabbitService.ConsumeMessages(
+                            async message => await ProcessMessage(message, uri, exchangeName),
+                            endpoint.Queue);
+                        consumers.Add(consumer);
+                        logger.RelayEndpointConfigured(uri, exchangeName, endpoint.Queue?.Name);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.ErrorConfiguringRelayEndpoint(ex, uri, exchangeName, endpoint.Queue?.Name);
+                    }
                 }
             }
 
@@ -92,6 +98,7 @@ public class RelayHostedService : IHostedService
         {
             using var httpClient = httpClientFactory.CreateClient();
             httpClient.BaseAddress = endpoint;
+            httpClient.Timeout = TimeSpan.FromMicroseconds(options.Value.Timeout);
 
             using var content = new StreamContent(await messageSerializer.ConvertMessageToStream(message));
             await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
@@ -108,6 +115,7 @@ public class RelayHostedService : IHostedService
         catch (Exception ex)
         {
             logger.ErrorRelayingMessage(ex, endpoint, exchangeName, message.Properties, message.Body.Length);
+            await Task.Delay(options.Value.RequeueDelay);
             return ProcessMessageResult.Requeue;
         }
 

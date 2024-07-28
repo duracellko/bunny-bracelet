@@ -54,6 +54,8 @@ internal sealed class RabbitRunner : IAsyncDisposable
         }
     }
 
+    public RabbitConnection CreateConnection() => new RabbitConnection(Uri);
+
     public async ValueTask DisposeAsync()
     {
         await Stop();
@@ -149,7 +151,7 @@ internal sealed class RabbitRunner : IAsyncDisposable
     private async Task<bool> WaitForInitialization()
     {
         const string searchText = "started TCP listener on [::]:5672";
-        for (var timeout = DateTime.UtcNow.AddSeconds(10); DateTime.UtcNow <= timeout;)
+        for (var timeout = DateTime.UtcNow.AddSeconds(30); DateTime.UtcNow <= timeout;)
         {
             var parameters = new ContainerLogsParameters
             {

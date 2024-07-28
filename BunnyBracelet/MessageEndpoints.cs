@@ -20,7 +20,7 @@ public static class MessageEndpoints
         var message = default(Message);
         logger.ReceivingInboundMessage(context.Request.ContentLength, context.TraceIdentifier);
 
-        if (string.IsNullOrEmpty(options.Value.InboundExchange))
+        if (string.IsNullOrEmpty(options.Value.InboundExchange?.Name))
         {
             logger.MissingInboundExchange();
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
