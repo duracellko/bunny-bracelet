@@ -75,14 +75,24 @@ public class RelayHostedService : IHostedService
         return Task.CompletedTask;
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Dispose other consumers.")]
     public Task StopAsync(CancellationToken cancellationToken)
     {
         logger.RelayServiceStopping();
         while (consumers.Count > 0)
         {
             var index = consumers.Count - 1;
-            consumers[index].Dispose();
+            var consumer = consumers[index];
             consumers.RemoveAt(index);
+
+            try
+            {
+                consumer.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.ErrorClosingRelayConsumer(ex);
+            }
         }
 
         logger.RelayServiceStopped();
@@ -94,14 +104,17 @@ public class RelayHostedService : IHostedService
     {
         logger.RelayingMessage(endpoint, exchangeName, message.Properties, message.Body.Length);
 
+        string? responseContent = null;
         try
         {
             using var httpClient = httpClientFactory.CreateClient();
             httpClient.BaseAddress = endpoint;
-            httpClient.Timeout = TimeSpan.FromMicroseconds(options.Value.Timeout);
+            httpClient.Timeout = TimeSpan.FromMilliseconds(options.Value.Timeout);
 
             using var content = new StreamContent(await messageSerializer.ConvertMessageToStream(message));
-            await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
+            var response = await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
+            responseContent = await response.Content.ReadAsStringAsync();
+            response.EnsureSuccessStatusCode();
 
             logger.MessageRelayed(endpoint, exchangeName, message.Properties, message.Body.Length);
             return ProcessMessageResult.Success;
@@ -109,17 +122,17 @@ public class RelayHostedService : IHostedService
         catch (HttpRequestException ex) when (IsBadRequestStatusCode(ex.StatusCode))
         {
             // Reject and do not retry, when HTTP Status Code is 4xx.
-            logger.ErrorRelayingMessage(ex, endpoint, exchangeName, message.Properties, message.Body.Length);
+            logger.ErrorRelayingMessage(ex, endpoint, exchangeName, message.Properties, message.Body.Length, responseContent);
             return ProcessMessageResult.Reject;
         }
         catch (Exception ex)
         {
-            logger.ErrorRelayingMessage(ex, endpoint, exchangeName, message.Properties, message.Body.Length);
+            logger.ErrorRelayingMessage(ex, endpoint, exchangeName, message.Properties, message.Body.Length, responseContent);
             await Task.Delay(options.Value.RequeueDelay);
             return ProcessMessageResult.Requeue;
         }
 
-        bool IsBadRequestStatusCode(HttpStatusCode? statusCode)
+        static bool IsBadRequestStatusCode(HttpStatusCode? statusCode)
         {
             return statusCode.HasValue && statusCode.Value >= HttpStatusCode.BadRequest && statusCode.Value < HttpStatusCode.InternalServerError;
         }

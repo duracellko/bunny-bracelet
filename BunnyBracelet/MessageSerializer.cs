@@ -237,7 +237,7 @@ public class MessageSerializer : IMessageSerializer
         reader.AdvanceTo(readResult.Buffer.Slice(stringLength).Start);
         return result;
 
-        int GetStringLength(ReadOnlySequence<byte> buffer)
+        static int GetStringLength(ReadOnlySequence<byte> buffer)
         {
             Span<byte> stringLengthBytes = stackalloc byte[4];
             buffer.Slice(0, 4).CopyTo(stringLengthBytes);
@@ -270,7 +270,7 @@ public class MessageSerializer : IMessageSerializer
         reader.AdvanceTo(readResult.Buffer.Slice(8).Start);
         return result;
 
-        long GetLong(ReadOnlySequence<byte> buffer)
+        static long GetLong(ReadOnlySequence<byte> buffer)
         {
             Span<byte> resultBytes = stackalloc byte[8];
             buffer.Slice(0, 8).CopyTo(resultBytes);
@@ -290,7 +290,7 @@ public class MessageSerializer : IMessageSerializer
         reader.AdvanceTo(readResult.Buffer.Slice(length).Start);
         return result;
 
-        int GetLength(ReadOnlySequence<byte> buffer)
+        static int GetLength(ReadOnlySequence<byte> buffer)
         {
             Span<byte> lengthBytes = stackalloc byte[4];
             buffer.Slice(0, 4).CopyTo(lengthBytes);

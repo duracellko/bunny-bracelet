@@ -17,14 +17,29 @@ public class SystemTest
 {
     private const string OutputSeparator = "----------";
 
+    [ClassInitialize]
+    public static void Initialize(TestContext context)
+    {
+        RabbitRunner.Reset();
+    }
+
+    [ClassCleanup]
+    public static async Task Cleanup()
+    {
+        RabbitRunner.Reset();
+        using var rabbit = new RabbitRunner();
+        await rabbit.Cleanup();
+    }
+
     [TestMethod]
     public async Task SendMessageBetween2RabbitMQInstances()
     {
-        await using var rabbit1 = new RabbitRunner(5673);
-        await using var rabbit2 = new RabbitRunner(5674);
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
 
+        await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
         await Task.WhenAll(bunny1.Start(), bunny2.Start());
 
@@ -67,8 +82,8 @@ public class SystemTest
             var messageResult = await WaitForMessage(queue2);
 
             Assert.IsNotNull(messageResult.properties, "Message does not have basic properties.");
-            AssertMessagePropertiesAreEqual(properties, messageResult.properties);
-            CollectionAssert.AreEqual(messageContent, messageResult.body);
+            MessageAssert.ArePropertiesEqual(properties, messageResult.properties);
+            MessageAssert.AreBodiesEqual(messageContent, messageResult.body);
         }
         finally
         {
@@ -79,13 +94,14 @@ public class SystemTest
     [TestMethod]
     public async Task RelayMessageTo2RabbitMQInstances()
     {
-        await using var rabbit1 = new RabbitRunner(5673);
-        await using var rabbit2 = new RabbitRunner(5674);
-        await using var rabbit3 = new RabbitRunner(5675);
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+        using var rabbit3 = new RabbitRunner(5675);
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPorts: new[] { 5002, 5003 });
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
 
+        await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
         await Task.WhenAll(bunny1.Start(), bunny2.Start(), bunny3.Start());
 
@@ -112,13 +128,13 @@ public class SystemTest
 
             Assert.IsNotNull(messageResult.properties, "Message does not have basic properties.");
             Assert.AreEqual(messageId, messageResult.properties.MessageId);
-            CollectionAssert.AreEqual(messageContent, messageResult.body);
+            MessageAssert.AreBodiesEqual(messageContent, messageResult.body);
 
             messageResult = await WaitForMessage(queue3);
 
             Assert.IsNotNull(messageResult.properties, "Message does not have basic properties.");
             Assert.AreEqual(messageId, messageResult.properties.MessageId);
-            CollectionAssert.AreEqual(messageContent, messageResult.body);
+            MessageAssert.AreBodiesEqual(messageContent, messageResult.body);
         }
         finally
         {
@@ -129,13 +145,14 @@ public class SystemTest
     [TestMethod]
     public async Task RelayMessagesFrom2RabbitMQInstances()
     {
-        await using var rabbit1 = new RabbitRunner(5673);
-        await using var rabbit2 = new RabbitRunner(5674);
-        await using var rabbit3 = new RabbitRunner(5675);
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+        using var rabbit3 = new RabbitRunner(5675);
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5003);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5003);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
 
+        await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
         await Task.WhenAll(bunny1.Start(), bunny2.Start(), bunny3.Start());
 
@@ -144,48 +161,18 @@ public class SystemTest
             using var connection1 = rabbit1.CreateConnection();
             using var connection2 = rabbit2.CreateConnection();
 
-            var messageList1 = new List<RabbitMessage>();
-            for (int i = 0; i < 1000; i++)
-            {
-                var properties = connection1.CreateProperties();
-                properties.MessageId = "MA-" + i.ToString("00000", CultureInfo.InvariantCulture);
-                messageList1.Add((properties, Guid.NewGuid().ToByteArray()));
-            }
-
-            var messageList2 = new List<RabbitMessage>();
-            for (int i = 0; i < 1000; i++)
-            {
-                var properties = connection2.CreateProperties();
-                properties.MessageId = "MB-" + i.ToString("00000", CultureInfo.InvariantCulture);
-                messageList2.Add((properties, Guid.NewGuid().ToByteArray()));
-            }
+            var messageList1 = CreateMessages(connection1, "MA-");
+            var messageList2 = CreateMessages(connection2, "MB-");
 
             using var connection3 = rabbit3.CreateConnection();
             connection3.Model.ExchangeDeclare(bunny3.InboundExchange.Name, ExchangeType.Fanout);
             var queue3 = connection3.Consume(bunny3.InboundExchange.Name!);
 
-            var task1 = Task.Run(() =>
-            {
-                foreach (var item in messageList1)
-                {
-                    connection1.Publish(bunny1.OutboundExchange.Name!, item.properties, item.body);
-                }
-            });
-            var task2 = Task.Run(() =>
-            {
-                foreach (var item in messageList2)
-                {
-                    connection2.Publish(bunny2.OutboundExchange.Name!, item.properties, item.body);
-                }
-            });
+            var task1 = SendMessages(connection1, messageList1, bunny1.OutboundExchange.Name!);
+            var task2 = SendMessages(connection2, messageList2, bunny2.OutboundExchange.Name!);
             await Task.WhenAll(task1, task2);
 
-            var messageResults = new Queue<RabbitMessage>();
-            for (int i = 0; i < 2000; i++)
-            {
-                var messageResult = await WaitForMessage(queue3);
-                messageResults.Enqueue(messageResult);
-            }
+            var messageResults = await WaitForMessages(queue3, 2000);
 
             var messageDictionary = messageList1.Concat(messageList2).ToDictionary(i => i.properties!.MessageId);
             foreach (var messageResult in messageResults)
@@ -203,21 +190,195 @@ public class SystemTest
 
             var messageIds = messageResults.Select(m => m.properties!.MessageId)
                 .Where(id => id.StartsWith("MA-", StringComparison.Ordinal)).ToList();
-            for (int i = 1; i < messageIds.Count; i++)
-            {
-                Assert.IsTrue(string.CompareOrdinal(messageIds[i - 1], messageIds[i]) < 0, "Unexpected order '{0}' > '{1}'.", messageIds[i - 1], messageIds[i]);
-            }
+            AssertCollectionIsOrdered(messageIds);
 
             messageIds = messageResults.Select(m => m.properties!.MessageId)
                 .Where(id => id.StartsWith("MB-", StringComparison.Ordinal)).ToList();
-            for (int i = 1; i < messageIds.Count; i++)
-            {
-                Assert.IsTrue(string.CompareOrdinal(messageIds[i - 1], messageIds[i]) < 0, "Unexpected order '{0}' > '{1}'.", messageIds[i - 1], messageIds[i]);
-            }
+            AssertCollectionIsOrdered(messageIds);
         }
         finally
         {
             await KillBunnies(bunny1, bunny2, bunny3);
+        }
+
+        static List<RabbitMessage> CreateMessages(RabbitConnection connection, string prefix)
+        {
+            var result = new List<RabbitMessage>(1000);
+            for (int i = 0; i < 1000; i++)
+            {
+                var properties = connection.CreateProperties();
+                properties.MessageId = prefix + i.ToString("00000", CultureInfo.InvariantCulture);
+                result.Add((properties, Guid.NewGuid().ToByteArray()));
+            }
+
+            return result;
+        }
+
+        static async Task SendMessages(RabbitConnection connection, List<RabbitMessage> messages, string exchange)
+        {
+            await Task.Run(() =>
+            {
+                foreach (var item in messages)
+                {
+                    connection.Publish(exchange, item.properties, item.body);
+                }
+            });
+        }
+    }
+
+    [TestMethod]
+    public async Task NetworkDisconnectedOnSecondMessage()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
+        var queueName = "bunny-test-" + Guid.NewGuid().ToString();
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
+        await Task.WhenAll(bunny1.Start(), bunny2.Start());
+
+        try
+        {
+            using var connection1 = rabbit1.CreateConnection();
+
+            var messages = new List<RabbitMessage>();
+            for (int i = 0; i < 3; i++)
+            {
+                var properties = connection1.CreateProperties();
+                properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
+                messages.Add((properties, Guid.NewGuid().ToByteArray()));
+            }
+
+            using (var connection2 = rabbit2.CreateConnection())
+            {
+                connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
+                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+
+                connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+
+                var messageResult = await WaitForMessage(queue2);
+                Assert.IsNotNull(messageResult.properties, "Message 1 does not have basic properties.");
+                MessageAssert.ArePropertiesEqual(messages[0].properties!, messageResult.properties);
+                MessageAssert.AreBodiesEqual(messages[0].body, messageResult.body);
+            }
+
+            await rabbit2.DisconnectContainerFromNetwork();
+            await Task.Delay(200);
+            connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await Task.Delay(200);
+            await rabbit2.ConnectContainerToNetwork();
+
+            using (var connection2 = rabbit2.CreateConnection())
+            {
+                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+
+                connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+
+                var messageResult = await WaitForMessage(queue2);
+                Assert.IsNotNull(messageResult.properties, "Message 2 does not have basic properties.");
+                MessageAssert.ArePropertiesEqual(messages[1].properties!, messageResult.properties);
+                MessageAssert.AreBodiesEqual(messages[1].body, messageResult.body);
+
+                messageResult = await WaitForMessage(queue2);
+                Assert.IsNotNull(messageResult.properties, "Message 2 does not have basic properties.");
+                MessageAssert.ArePropertiesEqual(messages[2].properties!, messageResult.properties);
+                MessageAssert.AreBodiesEqual(messages[2].body, messageResult.body);
+            }
+        }
+        finally
+        {
+            await KillBunnies(bunny1, bunny2);
+        }
+    }
+
+    [TestMethod]
+    [SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "Random is sufficient for test data.")]
+    public async Task TooLargeMessage()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
+        await Task.WhenAll(bunny1.Start(), bunny2.Start());
+
+        try
+        {
+            using var connection1 = rabbit1.CreateConnection();
+            using var connection2 = rabbit2.CreateConnection();
+
+            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
+            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+
+            var properties = connection1.CreateProperties();
+            properties.MessageId = Guid.NewGuid().ToString();
+
+            // Maximum HTTP request size in ASP.NET Core
+            var body = new byte[30000000];
+            var random = new Random();
+            random.NextBytes(body);
+
+            connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
+
+            const string expectedOutput = "Message rejected by consumer";
+            var timeout = DateTime.UtcNow.AddSeconds(5);
+            var foundOutput = false;
+            while (DateTime.UtcNow < timeout && !foundOutput)
+            {
+                await Task.Delay(1000);
+                foundOutput = bunny1.GetOutput().Contains(expectedOutput, StringComparison.OrdinalIgnoreCase);
+            }
+
+            Assert.IsTrue(
+                bunny1.GetOutput().Contains(expectedOutput, StringComparison.OrdinalIgnoreCase),
+                "Missing bunny 1 log: Message rejected by consumer");
+            Assert.AreEqual(0, queue2.Count);
+        }
+        finally
+        {
+            await KillBunnies(bunny1, bunny2);
+        }
+    }
+
+    [TestMethod]
+    public async Task CloseBunnyBraceletWithDisconnectedNetwork()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
+        await Task.WhenAll(bunny1.Start(), bunny2.Start());
+
+        try
+        {
+            using var connection1 = rabbit1.CreateConnection();
+
+            var properties = connection1.CreateProperties();
+            properties.MessageId = Guid.NewGuid().ToString();
+            var body = Guid.NewGuid().ToByteArray();
+            connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
+
+            await Task.Delay(200);
+            await rabbit2.DisconnectContainerFromNetwork();
+            await Task.Delay(200);
+
+            await bunny2.Stop();
+            Assert.AreEqual(0, bunny2.ExitCode, $"Exit code - Bunny 2");
+
+            await bunny1.Stop();
+            Assert.AreEqual(0, bunny1.ExitCode, $"Exit code - Bunny 1");
+        }
+        finally
+        {
+            await rabbit2.ConnectContainerToNetwork();
+            await KillBunnies(bunny1, bunny2);
         }
     }
 
@@ -262,74 +423,32 @@ public class SystemTest
         throw new TimeoutException("Timeout waiting for message from queue.");
     }
 
-    private static void AssertMessagePropertiesAreEqual(IBasicProperties properties, IBasicProperties deserializedProperties)
+    private static async Task<List<RabbitMessage>> WaitForMessages(
+        IProducerConsumerCollection<RabbitMessage> queue,
+        int count)
     {
-        const string IsDifferent = " is different.";
-
-        Assert.AreEqual(properties.AppId, deserializedProperties.AppId, nameof(properties.AppId) + IsDifferent);
-        Assert.AreEqual(properties.ClusterId, deserializedProperties.ClusterId, nameof(properties.ClusterId) + IsDifferent);
-        Assert.AreEqual(properties.ContentEncoding, deserializedProperties.ContentEncoding, nameof(properties.ContentEncoding) + IsDifferent);
-        Assert.AreEqual(properties.ContentType, deserializedProperties.ContentType, nameof(properties.ContentType) + IsDifferent);
-        Assert.AreEqual(properties.CorrelationId, deserializedProperties.CorrelationId, nameof(properties.CorrelationId) + IsDifferent);
-        Assert.AreEqual(properties.DeliveryMode, deserializedProperties.DeliveryMode, nameof(properties.DeliveryMode) + IsDifferent);
-        Assert.AreEqual(properties.Expiration, deserializedProperties.Expiration, nameof(properties.Expiration) + IsDifferent);
-        Assert.AreEqual(properties.MessageId, deserializedProperties.MessageId, nameof(properties.MessageId) + IsDifferent);
-        Assert.AreEqual(properties.Persistent, deserializedProperties.Persistent, nameof(properties.Persistent) + IsDifferent);
-        Assert.AreEqual(properties.Priority, deserializedProperties.Priority, nameof(properties.Priority) + IsDifferent);
-        Assert.AreEqual(properties.ReplyTo, deserializedProperties.ReplyTo, nameof(properties.ReplyTo) + IsDifferent);
-        Assert.AreEqual(properties.Timestamp, deserializedProperties.Timestamp, nameof(properties.Timestamp) + IsDifferent);
-        Assert.AreEqual(properties.Type, deserializedProperties.Type, nameof(properties.Type) + IsDifferent);
-        Assert.AreEqual(properties.UserId, deserializedProperties.UserId, nameof(properties.UserId) + IsDifferent);
-
-        if (properties.ReplyToAddress is null)
+        var result = new List<RabbitMessage>();
+        for (int i = 0; i < 2000; i++)
         {
-            Assert.IsNull(deserializedProperties.ReplyToAddress, nameof(properties.ReplyToAddress) + " should be null.");
-        }
-        else
-        {
-            Assert.IsNotNull(deserializedProperties.ReplyToAddress, nameof(properties.ReplyToAddress) + " should not be null.");
-            AssertPublicationAddressesAreEqual(properties.ReplyToAddress, deserializedProperties.ReplyToAddress);
+            var messageResult = await WaitForMessage(queue);
+            result.Add(messageResult);
         }
 
-        if (properties.Headers is null || properties.Headers.Count == 0)
-        {
-            Assert.AreEqual(0, deserializedProperties.Headers?.Count ?? 0, nameof(properties.Headers) + " should be empty.");
-        }
-        else
-        {
-            Assert.IsNotNull(deserializedProperties.Headers, nameof(properties.Headers) + " should not be null.");
-            AssertMessageHeadersAreEqual(properties.Headers, deserializedProperties.Headers);
-        }
+        return result;
     }
 
-    private static void AssertMessageHeadersAreEqual(IDictionary<string, object?> headers, IDictionary<string, object?> deserializedHeaders)
+    private static void AssertCollectionIsOrdered<T>(IReadOnlyList<T> collection)
+        where T : IComparable<T>
     {
-        Assert.AreEqual(headers.Count, deserializedHeaders.Count, "Headers." + nameof(headers.Count) + " is different.");
-
-        foreach (var keyValuePair in headers)
+        if (collection.Count > 1)
         {
-            var deserializedValue = deserializedHeaders[keyValuePair.Key];
-            if (keyValuePair.Value is null)
+            Assert.IsNotNull(collection[0]);
+
+            for (int i = 1; i < collection.Count; i++)
             {
-                Assert.IsNull(deserializedValue, "Header '{0}' should be null.", keyValuePair.Key);
-            }
-            else
-            {
-                Assert.IsNotNull(deserializedValue, "Header '{0}' should not be null.", keyValuePair.Key);
-                var valueBytes = (byte[])keyValuePair.Value;
-                Assert.IsInstanceOfType<byte[]>(deserializedValue, "Header '{0}' should be a byte array.", keyValuePair.Key);
-                var deserializedValueBytes = (byte[])deserializedValue;
-                CollectionAssert.AreEqual(valueBytes, deserializedValueBytes, "Header '{0}' has different values.", keyValuePair.Key);
+                Assert.IsNotNull(collection[i]);
+                Assert.IsTrue(collection[i - 1].CompareTo(collection[i]) < 0, "Unexpected order '{0}' > '{1}'.", collection[i - 1], collection[i]);
             }
         }
-    }
-
-    private static void AssertPublicationAddressesAreEqual(PublicationAddress address, PublicationAddress deserializedAddress)
-    {
-        const string IsDifferent = " is different.";
-
-        Assert.AreEqual(address.ExchangeName, deserializedAddress.ExchangeName, nameof(address.ExchangeName) + IsDifferent);
-        Assert.AreEqual(address.ExchangeType, deserializedAddress.ExchangeType, nameof(address.ExchangeType) + IsDifferent);
-        Assert.AreEqual(address.RoutingKey, deserializedAddress.RoutingKey, nameof(address.RoutingKey) + IsDifferent);
     }
 }

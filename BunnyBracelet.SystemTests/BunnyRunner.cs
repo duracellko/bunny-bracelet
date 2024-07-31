@@ -13,8 +13,8 @@ internal sealed class BunnyRunner : IAsyncDisposable
     private const string Configuration = "Release";
 #endif
 
-    private const string DefaultInboundExchange = "test-inbound";
-    private const string DefaultOutboundExchange = "test-outbound";
+    private const string DefaultInboundExchangePrefix = "test-inbound";
+    private const string DefaultOutboundExchangePrefix = "test-outbound";
 
     private static readonly Lazy<string> LazyBunnyBraceletPath = new Lazy<string>(GetBunnyBraceletPath);
 
@@ -61,8 +61,8 @@ internal sealed class BunnyRunner : IAsyncDisposable
     public static BunnyRunner Create(
         int port,
         string rabbitMQUri,
-        string inboundExchange = DefaultInboundExchange,
-        string outboundExchange = DefaultOutboundExchange,
+        string? inboundExchange = null,
+        string? outboundExchange = null,
         int? endpointPort = default)
     {
         var endpoint = endpointPort.HasValue ? "http://localhost:" + endpointPort.Value.ToString(CultureInfo.InvariantCulture) : null;
@@ -72,17 +72,17 @@ internal sealed class BunnyRunner : IAsyncDisposable
     public static BunnyRunner Create(
         int port,
         string rabbitMQUri,
-        string inboundExchange = DefaultInboundExchange,
-        string outboundExchange = DefaultOutboundExchange,
+        string? inboundExchange = null,
+        string? outboundExchange = null,
         string? endpoint = null)
     {
         var inboundExchangeSettings = new ExchangeSettings
         {
-            Name = inboundExchange
+            Name = inboundExchange ?? DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
         };
         var outboundExchangeSettings = new ExchangeSettings
         {
-            Name = outboundExchange
+            Name = outboundExchange ?? DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
         };
         var endpoints = new List<EndpointSettings>();
         if (endpoint is not null)
@@ -96,8 +96,8 @@ internal sealed class BunnyRunner : IAsyncDisposable
     public static BunnyRunner Create(
         int port,
         string rabbitMQUri,
-        string inboundExchange = DefaultInboundExchange,
-        string outboundExchange = DefaultOutboundExchange,
+        string? inboundExchange = null,
+        string? outboundExchange = null,
         IReadOnlyList<int>? endpointPorts = null)
     {
         IReadOnlyList<string> endpoints = Array.Empty<string>();
@@ -112,17 +112,17 @@ internal sealed class BunnyRunner : IAsyncDisposable
     public static BunnyRunner Create(
         int port,
         string rabbitMQUri,
-        string inboundExchange = DefaultInboundExchange,
-        string outboundExchange = DefaultOutboundExchange,
+        string? inboundExchange = null,
+        string? outboundExchange = null,
         IReadOnlyList<string>? endpoints = null)
     {
         var inboundExchangeSettings = new ExchangeSettings
         {
-            Name = inboundExchange
+            Name = inboundExchange ?? DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
         };
         var outboundExchangeSettings = new ExchangeSettings
         {
-            Name = outboundExchange
+            Name = outboundExchange ?? DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
         };
         IReadOnlyList<EndpointSettings> endpointSettings = Array.Empty<EndpointSettings>();
         if (endpoints is not null)
@@ -217,7 +217,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         }
 
         // Run AOT published version, if it is found.
-        var nativePath = Path.Combine(path, runtimeId, "native");
+        var nativePath = Path.Combine(path, runtimeId, "publish");
         var result = Path.Combine(nativePath, filename);
         if (File.Exists(result))
         {

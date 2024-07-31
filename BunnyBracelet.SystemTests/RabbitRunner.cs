@@ -4,24 +4,42 @@ using Docker.DotNet.Models;
 
 namespace BunnyBracelet.SystemTests;
 
-internal sealed class RabbitRunner : IAsyncDisposable
+internal sealed class RabbitRunner : IDisposable
 {
     private const string Image = "rabbitmq:3.13";
     private const int RabbitMQPort = 5672;
 
+    private const string ContainerNamePrefix = "rabbitmq";
+    private const string EnvironmentLabel = "BunnyBracelet-Environment";
+    private const string PortLabel = "BunnyBracelet-Port";
+    private const string NetworkName = "bridge";
+
     private static readonly SemaphoreSlim PullImageSemaphore = new SemaphoreSlim(1, 1);
+    private static readonly Dictionary<int, string> EnvironmentPasswords = new Dictionary<int, string>();
 
     private readonly Lazy<DockerClient> dockerClient = new Lazy<DockerClient>(CreateDockerClient);
     private readonly string containerName;
     private string? containerId;
 
-    public RabbitRunner(int port = RabbitMQPort, string? username = null, string? password = null)
+    public RabbitRunner(int port = RabbitMQPort)
     {
         Port = port;
-        Username = string.IsNullOrEmpty(username) ? "bunny" : username;
-        Password = string.IsNullOrEmpty(password) ? Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) : password;
-        containerName = "rabbitmq-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
+        Username = "bunny";
+
+        if (EnvironmentPasswords.TryGetValue(port, out var password))
+        {
+            Password = password;
+        }
+        else
+        {
+            Password = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
+            EnvironmentPasswords[port] = Password;
+        }
+
+        containerName = $"{ContainerNamePrefix}-{EnvironmentId}-{port.ToString(CultureInfo.InvariantCulture)}";
     }
+
+    public static string EnvironmentId { get; private set; } = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
 
     public int Port { get; }
 
@@ -31,12 +49,24 @@ internal sealed class RabbitRunner : IAsyncDisposable
 
     public string Uri => $"amqp://{Username}:{Password}@localhost:{Port.ToString(CultureInfo.InvariantCulture)}/";
 
+    public static void Reset()
+    {
+        EnvironmentId = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
+        EnvironmentPasswords.Clear();
+    }
+
     public async Task Start()
     {
         if (containerId is null)
         {
             await PullImage();
-            containerId = await CreateContainer();
+
+            containerId = await TryGetContainer();
+            if (containerId is null)
+            {
+                containerId = await CreateContainer();
+            }
+
             await dockerClient.Value.Containers.StartContainerAsync(containerId, new ContainerStartParameters());
             if (!await WaitForInitialization())
             {
@@ -54,12 +84,54 @@ internal sealed class RabbitRunner : IAsyncDisposable
         }
     }
 
+    public async Task Cleanup()
+    {
+        var filters = new Dictionary<string, string>()
+        {
+            { "name", ContainerNamePrefix },
+            { "label", EnvironmentLabel }
+        };
+        var listParameters = new ContainersListParameters
+        {
+            All = true,
+            Filters = CreateFilters(filters)
+        };
+        var containers = await dockerClient.Value.Containers.ListContainersAsync(listParameters);
+
+        foreach (var container in containers)
+        {
+            bool isInactiveEnvironment = container.Labels.TryGetValue(EnvironmentLabel, out var label) &&
+                label != EnvironmentId;
+            if (isInactiveEnvironment)
+            {
+                await dockerClient.Value.Containers.StopContainerAsync(container.ID, new ContainerStopParameters());
+                await dockerClient.Value.Containers.RemoveContainerAsync(container.ID, new ContainerRemoveParameters());
+            }
+        }
+    }
+
+    public async Task ConnectContainerToNetwork()
+    {
+        var networkParameters = new NetworkConnectParameters
+        {
+            Container = containerName
+        };
+        await dockerClient.Value.Networks.ConnectNetworkAsync(NetworkName, networkParameters);
+    }
+
+    public async Task DisconnectContainerFromNetwork()
+    {
+        var networkParameters = new NetworkDisconnectParameters
+        {
+            Container = containerName
+        };
+        await dockerClient.Value.Networks.DisconnectNetworkAsync(NetworkName, networkParameters);
+    }
+
     public RabbitConnection CreateConnection() => new RabbitConnection(Uri);
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        await Stop();
-
         if (dockerClient.IsValueCreated)
         {
             dockerClient.Value.Dispose();
@@ -74,24 +146,32 @@ internal sealed class RabbitRunner : IAsyncDisposable
         return configuration.CreateClient();
     }
 
+    private static Dictionary<string, IDictionary<string, bool>> CreateFilters(IDictionary<string, string> filters)
+    {
+        var result = new Dictionary<string, IDictionary<string, bool>>();
+        foreach (var keyValuePair in filters)
+        {
+            var value = new Dictionary<string, bool>();
+            value.Add(keyValuePair.Value, true);
+            result.Add(keyValuePair.Key, value);
+        }
+
+        return result;
+    }
+
     private async Task PullImage()
     {
         // Do not pull image in parallel to avoid multiple downloads.
         await PullImageSemaphore.WaitAsync();
         try
         {
+            var filters = new Dictionary<string, string>()
+            {
+                { "reference", Image }
+            };
             var listParameters = new ImagesListParameters
             {
-                Filters = new Dictionary<string, IDictionary<string, bool>>()
-            {
-                {
-                    "reference",
-                    new Dictionary<string, bool>()
-                    {
-                        { Image, true }
-                    }
-                }
-            }
+                Filters = CreateFilters(filters)
             };
             var images = await dockerClient.Value.Images.ListImagesAsync(listParameters);
 
@@ -107,6 +187,32 @@ internal sealed class RabbitRunner : IAsyncDisposable
         finally
         {
             PullImageSemaphore.Release();
+        }
+    }
+
+    private async Task<string?> TryGetContainer()
+    {
+        var filters = new Dictionary<string, string>()
+        {
+            { "name", containerName },
+            { "label", EnvironmentLabel }
+        };
+        var listParameters = new ContainersListParameters
+        {
+            All = true,
+            Filters = CreateFilters(filters)
+        };
+        var containers = await dockerClient.Value.Containers.ListContainersAsync(listParameters);
+
+        return containers.Where(IsMatch)
+            .Select(c => c.ID)
+            .SingleOrDefault();
+
+        bool IsMatch(ContainerListResponse container)
+        {
+            return container.Names.Any(n => n.TrimStart('/') == containerName) &&
+                container.Labels.TryGetValue(EnvironmentLabel, out var label) &&
+                label == EnvironmentId;
         }
     }
 
@@ -142,6 +248,11 @@ internal sealed class RabbitRunner : IAsyncDisposable
             {
                 "RABBITMQ_DEFAULT_USER=" + Username,
                 "RABBITMQ_DEFAULT_PASS=" + Password
+            },
+            Labels = new Dictionary<string, string>()
+            {
+                { EnvironmentLabel, EnvironmentId },
+                { PortLabel, Port.ToString(CultureInfo.InvariantCulture) }
             }
         };
         var containerResponse = await dockerClient.Value.Containers.CreateContainerAsync(createContainerParameters);

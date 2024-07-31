@@ -39,10 +39,10 @@ internal static class BunnyBraceletLogger
         new EventId(101, nameof(MessageRelayed)),
         "Message (MessageId: {MessageId}, CorrelationId: {CorrelationId}, Size: {Size}) was relayed from RabbitMQ exchange '{Exchange}' to '{Uri}'.");
 
-    private static readonly Action<ILogger, string?, string?, int, string, Uri, Exception?> LogErrorRelayingMessage = LoggerMessage.Define<string?, string?, int, string, Uri>(
+    private static readonly Action<ILogger, string?, string?, int, string, Uri, string?, Exception?> LogErrorRelayingMessage = LoggerMessage.Define<string?, string?, int, string, Uri, string?>(
         LogLevel.Error,
         new EventId(102, nameof(ErrorRelayingMessage)),
-        "Relaying message (MessageId: {MessageId}, CorrelationId: {CorrelationId}, Size: {Size}) from RabbitMQ exchange '{Exchange}' to '{Uri}' failed.");
+        "Relaying message (MessageId: {MessageId}, CorrelationId: {CorrelationId}, Size: {Size}) from RabbitMQ exchange '{Exchange}' to '{Uri}' failed. Response: {Response}");
 
     private static readonly Action<ILogger, Exception?> LogRelayServiceStarting = LoggerMessage.Define(
         LogLevel.Debug,
@@ -78,6 +78,11 @@ internal static class BunnyBraceletLogger
         LogLevel.Warning,
         new EventId(109, nameof(MissingOutboundExchange)),
         "Outbound exchange is not configured. Message relay service is disabled. Configure setting 'BunnyBracelet.OutboundExchange'.");
+
+    private static readonly Action<ILogger, Exception?> LogErrorClosingRelayConsumer = LoggerMessage.Define(
+        LogLevel.Error,
+        new EventId(110, nameof(ErrorClosingRelayConsumer)),
+        "Closing RabbitMQ consumer failed.");
 
     private static readonly Action<ILogger, Uri, Exception?> LogConnectingToRabbitMQ = LoggerMessage.Define<Uri>(
         LogLevel.Information,
@@ -199,9 +204,9 @@ internal static class BunnyBraceletLogger
         LogMessageRelayed(logger, properties?.MessageId, properties?.CorrelationId, size, exchange, uri, null);
     }
 
-    public static void ErrorRelayingMessage(this ILogger logger, Exception exception, Uri uri, string exchange, IBasicProperties? properties, int size)
+    public static void ErrorRelayingMessage(this ILogger logger, Exception exception, Uri uri, string exchange, IBasicProperties? properties, int size, string? response)
     {
-        LogErrorRelayingMessage(logger, properties?.MessageId, properties?.CorrelationId, size, exchange, uri, exception);
+        LogErrorRelayingMessage(logger, properties?.MessageId, properties?.CorrelationId, size, exchange, uri, response, exception);
     }
 
     public static void RelayServiceStarting(this ILogger logger)
@@ -237,6 +242,11 @@ internal static class BunnyBraceletLogger
     public static void MissingOutboundExchange(this ILogger logger)
     {
         LogMissingOutboundExchange(logger, null);
+    }
+
+    public static void ErrorClosingRelayConsumer(this ILogger logger, Exception exception)
+    {
+        LogErrorClosingRelayConsumer(logger, exception);
     }
 
     public static void ConnectingToRabbitMQ(this ILogger logger, Uri uri)

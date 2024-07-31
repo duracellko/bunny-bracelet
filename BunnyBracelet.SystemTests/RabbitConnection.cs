@@ -27,17 +27,22 @@ internal sealed class RabbitConnection : IDisposable
 
     public IModel Model => model.Value;
 
-    public IBasicProperties CreateProperties() => Model.CreateBasicProperties();
+    public IBasicProperties CreateProperties()
+    {
+        var result = Model.CreateBasicProperties();
+        result.DeliveryMode = 1;
+        return result;
+    }
 
     public void Publish(string exchange, IBasicProperties? properties, ReadOnlyMemory<byte> body)
     {
         Model.BasicPublish(exchange, string.Empty, properties, body);
     }
 
-    public IProducerConsumerCollection<RabbitMessage> Consume(string exchange)
+    public IProducerConsumerCollection<RabbitMessage> Consume(string exchange, string? queue = null)
     {
         var model = Connection.CreateModel();
-        var messageConsumer = new MessageConsumer(model, exchange);
+        var messageConsumer = new MessageConsumer(model, exchange, queue);
         messageConsumer.Initialize();
         messageConsumers.Add(messageConsumer);
         return messageConsumer.Queue;
@@ -65,19 +70,24 @@ internal sealed class RabbitConnection : IDisposable
     {
         private readonly IModel model;
         private readonly string exchange;
+        private readonly string? queueName;
         private readonly ConcurrentQueue<RabbitMessage> queue = new ConcurrentQueue<RabbitMessage>();
 
-        public MessageConsumer(IModel model, string exchange)
+        public MessageConsumer(IModel model, string exchange, string? queueName)
         {
             this.model = model;
             this.exchange = exchange;
+            this.queueName = queueName;
         }
 
         public IProducerConsumerCollection<RabbitMessage> Queue => queue;
 
         public void Initialize()
         {
-            var queue = model.QueueDeclare();
+            var queue = model.QueueDeclare(
+                queueName ?? string.Empty,
+                !string.IsNullOrEmpty(queueName),
+                autoDelete: string.IsNullOrEmpty(queueName));
             model.QueueBind(queue.QueueName, exchange, string.Empty);
 
             var consumer = new EventingBasicConsumer(model);

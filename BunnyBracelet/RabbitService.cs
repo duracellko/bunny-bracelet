@@ -141,15 +141,17 @@ public sealed class RabbitService : IDisposable
         {
             disposing = true;
 
-            if (connectionStore is not null)
+            var connection = connectionStore;
+            if (connection is not null)
             {
-                connectionStore.Close();
-                connectionStore.Dispose();
+                connection.Close();
+                connection.Dispose();
             }
 
-            if (sendChannelStore is not null)
+            var sendChannel = sendChannelStore;
+            if (sendChannel is not null)
             {
-                sendChannelStore.Dispose();
+                sendChannel.Dispose();
             }
 
             disposed = true;
@@ -249,6 +251,10 @@ public sealed class RabbitService : IDisposable
             channel.QueueBind(queueName, exchangeName, string.Empty);
             logger.QueueBound(queueName, exchangeName);
 
+            // Receive only single message at time, so that it is returned to queue head
+            // in case of error.
+            channel.BasicQos(0, 1, false);
+
             var consumer = new AsyncEventingBasicConsumer(channel);
             consumer.Received += ConsumerOnReceived;
             consumerTag = channel.BasicConsume(queueName, false, consumer);
@@ -260,7 +266,7 @@ public sealed class RabbitService : IDisposable
         {
             if (!disposed)
             {
-                if (consumerTag != null)
+                if (consumerTag != null && channel.IsOpen)
                 {
                     channel.BasicCancel(consumerTag);
                     logger.ConsumerStopped(exchangeName, queueName!, consumerTag);
