@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Net;
 using System.Text;
 using RabbitMQ.Client;
 
@@ -32,12 +33,12 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task SendMessageBetween2RabbitMQInstances()
+    public async Task SendMessageFromOneRabbitMQInstanceToAnother()
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
-        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, outboundExchange: string.Empty, endpointPort: 5001);
 
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
@@ -79,11 +80,7 @@ public class SystemTest
             var messageContent = Guid.NewGuid().ToByteArray();
             connection1.Publish(bunny1.OutboundExchange.Name!, properties, messageContent);
 
-            var messageResult = await WaitForMessage(queue2);
-
-            Assert.IsNotNull(messageResult.properties, "Message does not have basic properties.");
-            MessageAssert.ArePropertiesEqual(properties, messageResult.properties);
-            MessageAssert.AreBodiesEqual(messageContent, messageResult.body);
+            await AssertMessageInQueue(queue2, (properties, messageContent), 1);
         }
         finally
         {
@@ -124,17 +121,8 @@ public class SystemTest
             properties1.MessageId = messageId;
             connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
 
-            var messageResult = await WaitForMessage(queue2);
-
-            Assert.IsNotNull(messageResult.properties, "Message does not have basic properties.");
-            Assert.AreEqual(messageId, messageResult.properties.MessageId);
-            MessageAssert.AreBodiesEqual(messageContent, messageResult.body);
-
-            messageResult = await WaitForMessage(queue3);
-
-            Assert.IsNotNull(messageResult.properties, "Message does not have basic properties.");
-            Assert.AreEqual(messageId, messageResult.properties.MessageId);
-            MessageAssert.AreBodiesEqual(messageContent, messageResult.body);
+            await AssertMessageInQueue(queue2, (properties1, messageContent), 1);
+            await AssertMessageInQueue(queue3, (properties1, messageContent), 1);
         }
         finally
         {
@@ -177,17 +165,15 @@ public class SystemTest
             var messageDictionary = messageList1.Concat(messageList2).ToDictionary(i => i.properties!.MessageId);
             foreach (var messageResult in messageResults)
             {
-                Assert.IsNotNull(messageResult.properties, "Message does not have basic properties.");
-                var messageId = messageResult.properties.MessageId;
-                Assert.IsNotNull(messageId, "MessageId is null.");
-
+                var messageId = GetMessageId(messageResult);
                 var message = messageDictionary[messageId];
                 CollectionAssert.AreEqual(message.body, messageResult.body);
                 messageDictionary.Remove(messageId);
             }
 
-            Assert.AreEqual(0, messageDictionary.Count, "Message List count");
+            Assert.AreEqual(0, messageDictionary.Count, "All messages should be in queue 3.");
 
+            // Verify that messages were received in correct order.
             var messageIds = messageResults.Select(m => m.properties!.MessageId)
                 .Where(id => id.StartsWith("MA-", StringComparison.Ordinal)).ToList();
             AssertCollectionIsOrdered(messageIds);
@@ -224,6 +210,14 @@ public class SystemTest
                 }
             });
         }
+
+        static string GetMessageId(RabbitMessage message)
+        {
+            Assert.IsNotNull(message.properties, "Message does not have basic properties.");
+            var messageId = message.properties.MessageId;
+            Assert.IsNotNull(messageId, "MessageId is null.");
+            return messageId;
+        }
     }
 
     [TestMethod]
@@ -258,10 +252,7 @@ public class SystemTest
 
                 connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
 
-                var messageResult = await WaitForMessage(queue2);
-                Assert.IsNotNull(messageResult.properties, "Message 1 does not have basic properties.");
-                MessageAssert.ArePropertiesEqual(messages[0].properties!, messageResult.properties);
-                MessageAssert.AreBodiesEqual(messages[0].body, messageResult.body);
+                await AssertMessageInQueue(queue2, messages[0], 1);
             }
 
             await rabbit2.DisconnectContainerFromNetwork();
@@ -276,15 +267,8 @@ public class SystemTest
 
                 connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
 
-                var messageResult = await WaitForMessage(queue2);
-                Assert.IsNotNull(messageResult.properties, "Message 2 does not have basic properties.");
-                MessageAssert.ArePropertiesEqual(messages[1].properties!, messageResult.properties);
-                MessageAssert.AreBodiesEqual(messages[1].body, messageResult.body);
-
-                messageResult = await WaitForMessage(queue2);
-                Assert.IsNotNull(messageResult.properties, "Message 2 does not have basic properties.");
-                MessageAssert.ArePropertiesEqual(messages[2].properties!, messageResult.properties);
-                MessageAssert.AreBodiesEqual(messages[2].body, messageResult.body);
+                await AssertMessageInQueue(queue2, messages[1], 2);
+                await AssertMessageInQueue(queue2, messages[2], 3);
             }
         }
         finally
@@ -299,7 +283,14 @@ public class SystemTest
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+
+        var endpoint = new EndpointSettings
+        {
+            Uri = BunnyRunner.GetUri(5002),
+            QueueName = "large-msg-queue-" + Guid.NewGuid().ToString(),
+            AutoDelete = false
+        };
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint });
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
 
         await rabbit1.Cleanup();
@@ -324,23 +315,519 @@ public class SystemTest
 
             connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
 
-            const string expectedOutput = "Message rejected by consumer";
-            var timeout = DateTime.UtcNow.AddSeconds(5);
-            var foundOutput = false;
-            while (DateTime.UtcNow < timeout && !foundOutput)
-            {
-                await Task.Delay(1000);
-                foundOutput = bunny1.GetOutput().Contains(expectedOutput, StringComparison.OrdinalIgnoreCase);
-            }
+            await WaitForLogOutput(bunny1, "Message rejected by consumer");
 
-            Assert.IsTrue(
-                bunny1.GetOutput().Contains(expectedOutput, StringComparison.OrdinalIgnoreCase),
-                "Missing bunny 1 log: Message rejected by consumer");
-            Assert.AreEqual(0, queue2.Count);
+            var queueMessageCount = (int)connection1.Model.MessageCount(endpoint.QueueName);
+            Assert.AreEqual(0, queueMessageCount, "Outbound queue should be empty.");
+            Assert.AreEqual(0, queue2.Count, "Inbound queue should be empty.");
         }
         finally
         {
             await KillBunnies(bunny1, bunny2);
+        }
+    }
+
+    [TestMethod]
+    public async Task RestartRabbitMQInstancesWithDurableQueues()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+
+        var inboundExchange1 = CreateExchangeSettings("durable-inbound");
+        var outboundExchange1 = CreateExchangeSettings("durable-outbound");
+        var endpoint1 = CreateEndpointSettings(5002);
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange1, outboundExchange1, endpoints: new[] { endpoint1 });
+
+        var inboundExchange2 = CreateExchangeSettings("durable-inbound");
+        var outboundExchange2 = CreateExchangeSettings("durable-outbound");
+        var endpoint2 = CreateEndpointSettings(5001);
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, inboundExchange2, outboundExchange2, endpoints: new[] { endpoint2 });
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
+        await Task.WhenAll(bunny1.Start(), bunny2.Start());
+
+        try
+        {
+            var queueName = "bunny-test-" + Guid.NewGuid().ToString();
+            var messages = new List<RabbitMessage>();
+
+            using (var connection1 = rabbit1.CreateConnection())
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    var properties = connection1.CreateProperties();
+                    properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
+                    properties.Persistent = true;
+                    messages.Add((properties, Guid.NewGuid().ToByteArray()));
+                }
+
+                using (var connection2 = rabbit2.CreateConnection())
+                {
+                    connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout, true);
+                    var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+
+                    connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+
+                    await AssertMessageInQueue(queue2, messages[0], 1);
+                }
+
+                await rabbit2.DisconnectContainerFromNetwork();
+                await Task.Delay(200);
+                await rabbit2.StopContainer();
+
+                connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            }
+
+            await Task.Delay(200);
+            await rabbit1.DisconnectContainerFromNetwork();
+            await Task.Delay(200);
+            await rabbit1.StopContainer();
+
+            await Task.Delay(500);
+            await rabbit1.ConnectContainerToNetwork();
+            await rabbit1.StartContainer();
+
+            using (var connection1 = rabbit1.CreateConnection())
+            {
+                connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+
+                await rabbit2.ConnectContainerToNetwork();
+                await rabbit2.StartContainer();
+
+                using (var connection2 = rabbit2.CreateConnection())
+                {
+                    var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                    await AssertMessageInQueue(queue2, messages[1], 2);
+                    await AssertMessageInQueue(queue2, messages[2], 3);
+                }
+            }
+        }
+        finally
+        {
+            await KillBunnies(bunny1, bunny2);
+        }
+
+        static ExchangeSettings CreateExchangeSettings(string prefix)
+        {
+            return new ExchangeSettings
+            {
+                Name = $"{prefix}-{Guid.NewGuid().ToString()}",
+                Durable = true
+            };
+        }
+
+        static EndpointSettings CreateEndpointSettings(int port)
+        {
+            return new EndpointSettings
+            {
+                Uri = BunnyRunner.GetUri(port),
+                QueueName = $"test-relay-{Guid.NewGuid().ToString()}",
+                Durable = true,
+                AutoDelete = false
+            };
+        }
+    }
+
+    [TestMethod]
+    public async Task StopDeliveryRetryAfterReachingMessageExpiration()
+    {
+        const string expiration = "4200";
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
+        bunny1.RequeueDelay = 1000;
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, outboundExchange: string.Empty, endpointPort: default);
+        var queueName = "bunny-test-" + Guid.NewGuid().ToString();
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
+        await Task.WhenAll(bunny1.Start(), bunny2.Start());
+
+        try
+        {
+            using var connection1 = rabbit1.CreateConnection();
+
+            var messages = new List<RabbitMessage>();
+            for (int i = 0; i < 3; i++)
+            {
+                var properties = connection1.CreateProperties();
+                properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
+                properties.Expiration = expiration;
+                messages.Add((properties, Guid.NewGuid().ToByteArray()));
+            }
+
+            using (var connection2 = rabbit2.CreateConnection())
+            {
+                connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
+                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+
+                connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+
+                await AssertMessageInQueue(queue2, messages[0], 1);
+            }
+
+            await rabbit2.DisconnectContainerFromNetwork();
+            await Task.Delay(200);
+
+            // Scenario:
+            // T+0: queue message 1
+            // T+1000: 1st retry to relay message 1
+            // T+2000: 2nd retry to relay message 1
+            // T+3000: 3rd retry to relay message 1
+            // T+3500: queue message 2
+            // T+4000: 4th retry to relay message 1
+            // T+4100: restore network connestion of rabbit 2
+            // T+4200: message 1 expires
+            // T+5000: end pause after 4th retry relay message 1
+            // T+5000: relay message 2 - fails, because connection is not recovered yet
+            // T+5000: network connection recovery of bunny 2
+            // T+6000: 1st retry to relay message 2
+            //
+            // Note: Network recovery interval is 5 seconds
+            connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await Task.Delay(3500);
+            connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+            await Task.Delay(600);
+            await rabbit2.ConnectContainerToNetwork();
+
+            using (var connection2 = rabbit2.CreateConnection())
+            {
+                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                await AssertMessageInQueue(queue2, messages[2], 3);
+            }
+        }
+        finally
+        {
+            await KillBunnies(bunny1, bunny2);
+        }
+    }
+
+    [TestMethod]
+    public async Task MessageExpirationIsCopiedToDestination()
+    {
+        const string expiration = "4200";
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
+        bunny1.RequeueDelay = 1000;
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, outboundExchange: string.Empty, endpointPort: default);
+        var queueName = "bunny-test-" + Guid.NewGuid().ToString();
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
+        await Task.WhenAll(bunny1.Start(), bunny2.Start());
+
+        try
+        {
+            using var connection1 = rabbit1.CreateConnection();
+
+            var messages = new List<RabbitMessage>();
+            for (int i = 0; i < 3; i++)
+            {
+                var properties = connection1.CreateProperties();
+                properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
+                properties.Expiration = expiration;
+                messages.Add((properties, Guid.NewGuid().ToByteArray()));
+            }
+
+            using (var connection2 = rabbit2.CreateConnection())
+            {
+                connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
+                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+
+                connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+
+                await AssertMessageInQueue(queue2, messages[0], 1);
+            }
+
+            await rabbit2.DisconnectContainerFromNetwork();
+            await Task.Delay(200);
+
+            // Same scenario as StopDeliveryRetryAfterReachingMessageTTL
+            connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await Task.Delay(3500);
+            connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+            await Task.Delay(600);
+            await rabbit2.ConnectContainerToNetwork();
+
+            using (var connection2 = rabbit2.CreateConnection())
+            {
+                // Start consuming messages at T+8000
+                // Notice that is after message 2 original expiration (T+7700)
+                // However, message 2 expiration is reset, when it is queue by bunny 2.
+                await Task.Delay(3900);
+                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                await AssertMessageInQueue(queue2, messages[2], 3);
+            }
+        }
+        finally
+        {
+            await KillBunnies(bunny1, bunny2);
+        }
+    }
+
+    [TestMethod]
+    public async Task RelayOfMessageShouldTimeout()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+
+        await using var fakeBunny2 = new FakeBunnyBracelet();
+        await fakeBunny2.Start();
+
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoint: fakeBunny2.Uri!.ToString());
+        bunny1.Timeout = 1000;
+
+        await rabbit1.Cleanup();
+        await rabbit1.Start();
+        await bunny1.Start();
+        var exchangeName = bunny1.OutboundExchange.Name!;
+
+        try
+        {
+            var messageId = Guid.NewGuid().ToString();
+            var messageContent = Guid.NewGuid().ToByteArray();
+
+            using var connection1 = rabbit1.CreateConnection();
+            var properties1 = connection1.CreateProperties();
+            properties1.MessageId = messageId;
+            connection1.Publish(exchangeName, properties1, messageContent);
+
+            var expectedOutput = $"Relaying message (MessageId: {messageId}, CorrelationId: (null), Size: 16) from RabbitMQ exchange '{exchangeName}' to '{fakeBunny2.Uri}' failed.";
+            await WaitForLogOutput(bunny1, expectedOutput, TimeSpan.FromMilliseconds(1100));
+        }
+        finally
+        {
+            await KillBunnies(bunny1);
+        }
+    }
+
+    [TestMethod]
+    public async Task ShouldReturn403ForbiddenWhenNoInboundExchangeConfigured()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        await using var bunny = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
+
+        await rabbit1.Cleanup();
+        await rabbit1.Start();
+        await bunny.Start();
+
+        try
+        {
+            using var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri(bunny.Uri);
+
+            var message = new byte[] { 82, 77, 81, 82, 0 };
+            using var content = new ByteArrayContent(message);
+            var response = await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
+
+            Assert.AreEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        finally
+        {
+            await KillBunnies(bunny);
+        }
+    }
+
+    [TestMethod]
+    public async Task ShouldReturn400BadRequestOnInvalidInput()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        await using var bunny = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+
+        await rabbit1.Cleanup();
+        await rabbit1.Start();
+        await bunny.Start();
+
+        try
+        {
+            using var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri(bunny.Uri);
+
+            var message = new byte[] { 82, 77, 81, 82 };
+            using var content = new ByteArrayContent(message);
+            var response = await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
+
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+        finally
+        {
+            await KillBunnies(bunny);
+        }
+    }
+
+    [TestMethod]
+    public async Task Initialize3rdEndpointRelayWhen1stFailedAnd2ndHasMissingUri()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+        using var rabbit3 = new RabbitRunner(5675);
+
+        var endpoint1 = CreateEndpointSettings(5002);
+        var endpoint2 = CreateEndpointSettings(null);
+        var endpoint3 = CreateEndpointSettings(5003);
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint1, endpoint2, endpoint3 });
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
+        await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
+
+        using var connection1 = rabbit1.CreateConnection();
+        connection1.Model.QueueDeclare(endpoint1.QueueName);
+
+        await Task.WhenAll(bunny1.Start(), bunny2.Start(), bunny3.Start());
+
+        try
+        {
+            var expectedOutput = $"Setup of relay from RabbitMQ exchange '{bunny1.OutboundExchange.Name}' and queue '{endpoint1.QueueName}' to endpoint '{endpoint1.Uri}/' failed.";
+            await WaitForLogOutput(bunny1, expectedOutput);
+
+            var messageId = Guid.NewGuid().ToString();
+            var messageContent = Guid.NewGuid().ToByteArray();
+
+            using var connection2 = rabbit2.CreateConnection();
+            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
+            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+
+            using var connection3 = rabbit3.CreateConnection();
+            connection3.Model.ExchangeDeclare(bunny3.InboundExchange.Name, ExchangeType.Fanout);
+            var queue3 = connection3.Consume(bunny3.InboundExchange.Name!);
+
+            var properties1 = connection1.CreateProperties();
+            properties1.MessageId = messageId;
+            connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
+
+            await AssertMessageInQueue(queue3, (properties1, messageContent), 1);
+            Assert.AreEqual(0, queue2.Count);
+        }
+        finally
+        {
+            await KillBunnies(bunny1, bunny2, bunny3);
+        }
+
+        static EndpointSettings CreateEndpointSettings(int? port)
+        {
+            return new EndpointSettings
+            {
+                Uri = port.HasValue ? BunnyRunner.GetUri(port.Value) : string.Empty,
+                QueueName = $"test-relay-{Guid.NewGuid().ToString()}",
+                Durable = false,
+                AutoDelete = false
+            };
+        }
+    }
+
+    [TestMethod]
+    public async Task NoRelayWhenOutboundExchangeIsNotConfigured()
+    {
+        using var rabbit = new RabbitRunner(5673);
+        await using var bunny = BunnyRunner.Create(5001, rabbit.Uri, outboundExchange: string.Empty, endpointPort: 5002);
+
+        await rabbit.Cleanup();
+        await rabbit.Start();
+        await bunny.Start();
+
+        try
+        {
+            var expectedOutput = "Outbound exchange is not configured. Message relay service is disabled. Configure setting 'BunnyBracelet.OutboundExchange'.";
+            await WaitForLogOutput(bunny, expectedOutput);
+        }
+        finally
+        {
+            await KillBunnies(bunny);
+        }
+    }
+
+    [TestMethod]
+    public async Task TwoEndpointsOnTheSameQueueRelaysMessageOnlyToOne()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+        using var rabbit3 = new RabbitRunner(5675);
+
+        var queueName = $"test-relay-{Guid.NewGuid().ToString()}";
+        var endpoint1 = CreateEndpointSettings(5002, queueName);
+        var endpoint2 = CreateEndpointSettings(5003, queueName);
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint1, endpoint2 });
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
+        await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
+        await Task.WhenAll(bunny1.Start(), bunny2.Start(), bunny3.Start());
+
+        try
+        {
+            var messageId = Guid.NewGuid().ToString();
+            var messageContent = Guid.NewGuid().ToByteArray();
+
+            using var connection1 = rabbit1.CreateConnection();
+
+            using var connection2 = rabbit2.CreateConnection();
+            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
+            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+
+            using var connection3 = rabbit3.CreateConnection();
+            connection3.Model.ExchangeDeclare(bunny3.InboundExchange.Name, ExchangeType.Fanout);
+            var queue3 = connection3.Consume(bunny3.InboundExchange.Name!);
+
+            var properties1 = connection1.CreateProperties();
+            properties1.MessageId = messageId;
+            connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
+
+            var messageResult = await WaitForMessage(queue2, queue3);
+            Assert.IsNotNull(messageResult.properties, $"Message does not have basic properties.");
+            MessageAssert.ArePropertiesEqual(properties1, messageResult.properties);
+            MessageAssert.AreBodiesEqual(messageContent, messageResult.body);
+
+            await Task.Delay(100);
+            Assert.AreEqual(0, queue2.Count);
+            Assert.AreEqual(0, queue3.Count);
+        }
+        finally
+        {
+            await KillBunnies(bunny1, bunny2, bunny3);
+        }
+
+        static EndpointSettings CreateEndpointSettings(int port, string queue)
+        {
+            return new EndpointSettings
+            {
+                Uri = BunnyRunner.GetUri(port),
+                QueueName = queue,
+                Durable = false,
+                AutoDelete = false
+            };
+        }
+
+        static async Task<RabbitMessage> WaitForMessage(params IProducerConsumerCollection<RabbitMessage>[] queues)
+        {
+            var expiration = DateTime.UtcNow.AddSeconds(5);
+            while (DateTime.UtcNow <= expiration)
+            {
+                foreach (var queue in queues)
+                {
+                    if (queue.TryTake(out var message))
+                    {
+                        return message;
+                    }
+                }
+
+                await Task.Delay(100);
+            }
+
+            foreach (var queue in queues)
+            {
+                if (queue.TryTake(out var item))
+                {
+                    return item;
+                }
+            }
+
+            throw new TimeoutException("Timeout waiting for message from queue.");
         }
     }
 
@@ -404,8 +891,8 @@ public class SystemTest
         IProducerConsumerCollection<RabbitMessage> queue,
         TimeSpan? timeout = default)
     {
-        var expiration = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(5));
-        while (DateTime.UtcNow <= expiration)
+        var timeoutTime = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(8));
+        while (DateTime.UtcNow <= timeoutTime)
         {
             if (queue.TryTake(out var message))
             {
@@ -435,6 +922,27 @@ public class SystemTest
         }
 
         return result;
+    }
+
+    private static async Task AssertMessageInQueue(IProducerConsumerCollection<RabbitMessage> queue, RabbitMessage expectedMessage, int index)
+    {
+        var messageResult = await WaitForMessage(queue);
+        Assert.IsNotNull(messageResult.properties, $"Message {index} does not have basic properties.");
+        MessageAssert.ArePropertiesEqual(expectedMessage.properties!, messageResult.properties);
+        MessageAssert.AreBodiesEqual(expectedMessage.body, messageResult.body);
+    }
+
+    private static async Task WaitForLogOutput(BunnyRunner bunny, string expectedOutput, TimeSpan? timeout = default)
+    {
+        var timeoutTime = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(5));
+        var foundOutput = false;
+        while (DateTime.UtcNow < timeoutTime && !foundOutput)
+        {
+            await Task.Delay(250);
+            foundOutput = bunny.GetOutput().Contains(expectedOutput, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.IsTrue(foundOutput, "Missing log output: " + expectedOutput);
     }
 
     private static void AssertCollectionIsOrdered<T>(IReadOnlyList<T> collection)

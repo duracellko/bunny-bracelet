@@ -87,6 +87,7 @@ internal sealed class RabbitConnection : IDisposable
             var queue = model.QueueDeclare(
                 queueName ?? string.Empty,
                 !string.IsNullOrEmpty(queueName),
+                exclusive: string.IsNullOrEmpty(queueName),
                 autoDelete: string.IsNullOrEmpty(queueName));
             model.QueueBind(queue.QueueName, exchange, string.Empty);
 

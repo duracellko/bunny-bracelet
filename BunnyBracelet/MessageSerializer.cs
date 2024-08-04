@@ -180,9 +180,6 @@ public class MessageSerializer : IMessageSerializer
             case PropertyCodes.MessageId:
                 state.Properties.MessageId = await ReadString(reader);
                 break;
-            case PropertyCodes.Persistent:
-                state.Properties.Persistent = await ReadBoolean(reader);
-                break;
             case PropertyCodes.Priority:
                 state.Properties.Priority = await ReadByte(reader);
                 break;
@@ -243,15 +240,6 @@ public class MessageSerializer : IMessageSerializer
             buffer.Slice(0, 4).CopyTo(stringLengthBytes);
             return BinaryPrimitives.ReadInt32LittleEndian(stringLengthBytes);
         }
-    }
-
-    private static async ValueTask<bool> ReadBoolean(PipeReader reader)
-    {
-        var readResult = await reader.ReadAsync();
-        byte value = 0;
-        readResult.Buffer.Slice(0, 1).CopyTo(new Span<byte>(ref value));
-        reader.AdvanceTo(readResult.Buffer.Slice(1).Start);
-        return value != 0;
     }
 
     private static async ValueTask<byte> ReadByte(PipeReader reader)
@@ -409,9 +397,6 @@ public class MessageSerializer : IMessageSerializer
             await writer.FlushAsync();
         }
 
-        WriteProperty(writer, PropertyCodes.Persistent, properties.Persistent);
-        await writer.FlushAsync();
-
         if (properties.IsPriorityPresent())
         {
             WriteProperty(writer, PropertyCodes.Priority, properties.Priority);
@@ -474,15 +459,6 @@ public class MessageSerializer : IMessageSerializer
 
         var bytesCount = WriteString(value, buffer);
         writer.Advance(2 + bytesCount);
-    }
-
-    private static void WriteProperty(PipeWriter writer, byte code, bool value)
-    {
-        var buffer = writer.GetSpan(3);
-        buffer[0] = Codes.Property;
-        buffer[1] = code;
-        buffer[2] = value ? (byte)1 : (byte)0;
-        writer.Advance(3);
     }
 
     private static void WriteProperty(PipeWriter writer, byte code, byte value)
@@ -635,13 +611,12 @@ public class MessageSerializer : IMessageSerializer
         public const byte DeliveryMode = 6;
         public const byte Expiration = 7;
         public const byte MessageId = 8;
-        public const byte Persistent = 9;
-        public const byte Priority = 10;
-        public const byte ReplyTo = 11;
-        public const byte ReplyToAddress = 12;
-        public const byte Timestamp = 13;
-        public const byte Type = 14;
-        public const byte UserId = 15;
+        public const byte Priority = 9;
+        public const byte ReplyTo = 10;
+        public const byte ReplyToAddress = 11;
+        public const byte Timestamp = 12;
+        public const byte Type = 13;
+        public const byte UserId = 14;
     }
 
     private sealed class MessageParsingState

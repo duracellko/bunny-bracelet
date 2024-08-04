@@ -119,7 +119,7 @@ public sealed class RabbitService : IDisposable
                 exchangeOptions.Type,
                 exchangeOptions.Durable,
                 exchangeOptions.AutoDelete,
-                exchangeOptions.Arguments);
+                null);
             logger.ExchangeInitialized(exchangeName, exchangeOptions.Type, exchangeOptions.Durable);
 
             var messageConsumer = new MessageConsumer(channel, process, exchangeName, queueOptions, logger);
@@ -196,7 +196,7 @@ public sealed class RabbitService : IDisposable
             exchangeOptions.Type,
             exchangeOptions.Durable,
             exchangeOptions.AutoDelete,
-            exchangeOptions.Arguments);
+            null);
         logger.ExchangeInitialized(exchangeName, exchangeOptions.Type, exchangeOptions.Durable);
         return channel;
     }
@@ -239,14 +239,16 @@ public sealed class RabbitService : IDisposable
 
         public void Initialize()
         {
+            var durable = queueOptions?.Durable ?? false;
+            var autoDelete = queueOptions?.AutoDelete ?? true;
             var queue = channel.QueueDeclare(
                 queueOptions?.Name ?? string.Empty,
-                queueOptions?.Durable ?? false,
-                true,
-                queueOptions?.AutoDelete ?? true,
-                queueOptions?.Arguments);
+                durable,
+                autoDelete,
+                autoDelete,
+                null);
             queueName = queue.QueueName;
-            logger.QueueInitialized(queueName, queueOptions?.Durable ?? false);
+            logger.QueueInitialized(queueName, durable);
 
             channel.QueueBind(queueName, exchangeName, string.Empty);
             logger.QueueBound(queueName, exchangeName);

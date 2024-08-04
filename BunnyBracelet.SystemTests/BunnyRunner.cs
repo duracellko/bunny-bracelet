@@ -13,8 +13,8 @@ internal sealed class BunnyRunner : IAsyncDisposable
     private const string Configuration = "Release";
 #endif
 
-    private const string DefaultInboundExchangePrefix = "test-inbound";
-    private const string DefaultOutboundExchangePrefix = "test-outbound";
+    private const string DefaultInboundExchangePrefix = "test-inbound-";
+    private const string DefaultOutboundExchangePrefix = "test-outbound-";
 
     private static readonly Lazy<string> LazyBunnyBraceletPath = new Lazy<string>(GetBunnyBraceletPath);
 
@@ -27,20 +27,18 @@ internal sealed class BunnyRunner : IAsyncDisposable
         string rabbitMQUri,
         ExchangeSettings inboundExchange,
         ExchangeSettings outboundExchange,
-        IReadOnlyList<EndpointSettings> endpoints,
-        int? timeout,
-        int? requeueDelay)
+        IReadOnlyList<EndpointSettings> endpoints)
     {
         Port = port;
         RabbitMQUri = rabbitMQUri;
         InboundExchange = inboundExchange;
         OutboundExchange = outboundExchange;
         Endpoints = endpoints;
-        Timeout = timeout;
-        RequeueDelay = requeueDelay;
     }
 
     public int Port { get; }
+
+    public string Uri => GetUri(Port);
 
     public string RabbitMQUri { get; }
 
@@ -50,13 +48,15 @@ internal sealed class BunnyRunner : IAsyncDisposable
 
     public IReadOnlyList<EndpointSettings> Endpoints { get; }
 
-    public int? Timeout { get; }
+    public int? Timeout { get; set; }
 
-    public int? RequeueDelay { get; }
+    public int? RequeueDelay { get; set; }
 
     public int? ExitCode { get; private set; }
 
     internal static string BunnyBraceletPath => LazyBunnyBraceletPath.Value;
+
+    public static string GetUri(int port) => "http://localhost:" + port.ToString(CultureInfo.InvariantCulture);
 
     public static BunnyRunner Create(
         int port,
@@ -65,7 +65,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         string? outboundExchange = null,
         int? endpointPort = default)
     {
-        var endpoint = endpointPort.HasValue ? "http://localhost:" + endpointPort.Value.ToString(CultureInfo.InvariantCulture) : null;
+        var endpoint = endpointPort.HasValue ? GetUri(endpointPort.Value) : null;
         return Create(port, rabbitMQUri, inboundExchange, outboundExchange, endpoint);
     }
 
@@ -90,7 +90,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
             endpoints.Add(new EndpointSettings { Uri = endpoint });
         }
 
-        return new BunnyRunner(port, rabbitMQUri, inboundExchangeSettings, outboundExchangeSettings, endpoints, default, default);
+        return new BunnyRunner(port, rabbitMQUri, inboundExchangeSettings, outboundExchangeSettings, endpoints);
     }
 
     public static BunnyRunner Create(
@@ -103,7 +103,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         IReadOnlyList<string> endpoints = Array.Empty<string>();
         if (endpointPorts is not null)
         {
-            endpoints = endpointPorts.Select(p => "http://localhost:" + p.ToString(CultureInfo.InvariantCulture)).ToList();
+            endpoints = endpointPorts.Select(p => GetUri(p)).ToList();
         }
 
         return Create(port, rabbitMQUri, inboundExchange, outboundExchange, endpoints);
@@ -130,7 +130,35 @@ internal sealed class BunnyRunner : IAsyncDisposable
             endpointSettings = endpoints.Select(e => new EndpointSettings { Uri = e }).ToList();
         }
 
-        return new BunnyRunner(port, rabbitMQUri, inboundExchangeSettings, outboundExchangeSettings, endpointSettings, default, default);
+        return new BunnyRunner(port, rabbitMQUri, inboundExchangeSettings, outboundExchangeSettings, endpointSettings);
+    }
+
+    public static BunnyRunner Create(
+        int port,
+        string rabbitMQUri,
+        ExchangeSettings? inboundExchange = null,
+        ExchangeSettings? outboundExchange = null,
+        IReadOnlyList<EndpointSettings>? endpoints = null)
+    {
+        if (inboundExchange == null)
+        {
+            inboundExchange = new ExchangeSettings
+            {
+                Name = DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
+            };
+        }
+
+        if (outboundExchange == null)
+        {
+            outboundExchange = new ExchangeSettings
+            {
+                Name = DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
+            };
+        }
+
+        endpoints ??= Array.Empty<EndpointSettings>();
+
+        return new BunnyRunner(port, rabbitMQUri, inboundExchange, outboundExchange, endpoints);
     }
 
     public async Task Start()
@@ -230,7 +258,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
     private static void SetEndpointEnvironment(IDictionary<string, string?> environment, EndpointSettings endpointSettings, int index)
     {
         var prefix = $"BunnyBracelet__Endpoints__{index.ToString(CultureInfo.InvariantCulture)}__";
-        var queuePrefix = prefix + "__Queue";
+        var queuePrefix = prefix + "Queue__";
 
         if (endpointSettings.Uri is not null)
         {
@@ -247,14 +275,9 @@ internal sealed class BunnyRunner : IAsyncDisposable
             environment[queuePrefix + "Durable"] = endpointSettings.Durable.Value.ToString(CultureInfo.InvariantCulture);
         }
 
-        if (endpointSettings.AutoDelete is not null)
+        if (endpointSettings.AutoDelete.HasValue)
         {
             environment[queuePrefix + "AutoDelete"] = endpointSettings.AutoDelete.Value.ToString(CultureInfo.InvariantCulture);
-        }
-
-        foreach (var argument in endpointSettings.Arguments)
-        {
-            environment[queuePrefix + "Arguments__" + argument.Key] = argument.Value;
         }
     }
 
@@ -331,14 +354,9 @@ internal sealed class BunnyRunner : IAsyncDisposable
             environment[prefix + "Durable"] = InboundExchange.Durable.Value.ToString(CultureInfo.InvariantCulture);
         }
 
-        if (InboundExchange.AutoDelete is not null)
+        if (InboundExchange.AutoDelete.HasValue)
         {
             environment[prefix + "AutoDelete"] = InboundExchange.AutoDelete.Value.ToString(CultureInfo.InvariantCulture);
-        }
-
-        foreach (var argument in InboundExchange.Arguments)
-        {
-            environment[prefix + "Arguments__" + argument.Key] = argument.Value;
         }
     }
 
@@ -361,14 +379,9 @@ internal sealed class BunnyRunner : IAsyncDisposable
             environment[prefix + "Durable"] = OutboundExchange.Durable.Value.ToString(CultureInfo.InvariantCulture);
         }
 
-        if (OutboundExchange.AutoDelete is not null)
+        if (OutboundExchange.AutoDelete.HasValue)
         {
             environment[prefix + "AutoDelete"] = OutboundExchange.AutoDelete.Value.ToString(CultureInfo.InvariantCulture);
-        }
-
-        foreach (var argument in OutboundExchange.Arguments)
-        {
-            environment[prefix + "Arguments__" + argument.Key] = argument.Value;
         }
     }
 

@@ -23,9 +23,4 @@ public class RabbitQueueOptions
     /// Default value is true.
     /// </remarks>
     public bool AutoDelete { get; set; } = true;
-
-    /// <summary>
-    /// Gets additional arguments of the queue.
-    /// </summary>
-    public IDictionary<string, object> Arguments { get; } = new Dictionary<string, object>();
 }

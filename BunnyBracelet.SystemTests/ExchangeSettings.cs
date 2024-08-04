@@ -9,6 +9,4 @@ internal sealed class ExchangeSettings
     public bool? Durable { get; set; }
 
     public bool? AutoDelete { get; set; }
-
-    public IDictionary<string, string?> Arguments { get; } = new Dictionary<string, string?>();
 }

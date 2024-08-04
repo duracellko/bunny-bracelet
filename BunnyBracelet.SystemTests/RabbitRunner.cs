@@ -2,6 +2,10 @@
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
+#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
+using ContainerStatus = (string? id, bool isRunning, bool isConnected);
+#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
+
 namespace BunnyBracelet.SystemTests;
 
 internal sealed class RabbitRunner : IDisposable
@@ -21,7 +25,12 @@ internal sealed class RabbitRunner : IDisposable
     private readonly string containerName;
     private string? containerId;
 
-    public RabbitRunner(int port = RabbitMQPort)
+    public RabbitRunner()
+        : this(RabbitMQPort)
+    {
+    }
+
+    public RabbitRunner(int port)
     {
         Port = port;
         Username = "bunny";
@@ -61,16 +70,22 @@ internal sealed class RabbitRunner : IDisposable
         {
             await PullImage();
 
-            containerId = await TryGetContainer();
-            if (containerId is null)
+            var containerStatus = await TryGetContainer();
+            if (containerStatus.id is null)
             {
-                containerId = await CreateContainer();
+                containerStatus = await CreateContainer();
             }
 
-            await dockerClient.Value.Containers.StartContainerAsync(containerId, new ContainerStartParameters());
-            if (!await WaitForInitialization())
+            containerId = containerStatus.id;
+
+            if (!containerStatus.isConnected)
             {
-                throw new InvalidOperationException("RabbitMQ initialization failed.");
+                await ConnectContainerToNetwork();
+            }
+
+            if (!containerStatus.isRunning)
+            {
+                await StartContainer();
             }
         }
     }
@@ -79,7 +94,7 @@ internal sealed class RabbitRunner : IDisposable
     {
         if (containerId is not null)
         {
-            await dockerClient.Value.Containers.StopContainerAsync(containerId, new ContainerStopParameters());
+            await StopContainer();
             await dockerClient.Value.Containers.RemoveContainerAsync(containerId, new ContainerRemoveParameters());
         }
     }
@@ -126,6 +141,21 @@ internal sealed class RabbitRunner : IDisposable
             Container = containerName
         };
         await dockerClient.Value.Networks.DisconnectNetworkAsync(NetworkName, networkParameters);
+    }
+
+    public async Task StartContainer()
+    {
+        var startTime = DateTimeOffset.UtcNow;
+        await dockerClient.Value.Containers.StartContainerAsync(containerId, new ContainerStartParameters());
+        if (!await WaitForInitialization(startTime))
+        {
+            throw new InvalidOperationException("RabbitMQ initialization failed.");
+        }
+    }
+
+    public async Task StopContainer()
+    {
+        await dockerClient.Value.Containers.StopContainerAsync(containerId, new ContainerStopParameters());
     }
 
     public RabbitConnection CreateConnection() => new RabbitConnection(Uri);
@@ -190,7 +220,7 @@ internal sealed class RabbitRunner : IDisposable
         }
     }
 
-    private async Task<string?> TryGetContainer()
+    private async Task<ContainerStatus> TryGetContainer()
     {
         var filters = new Dictionary<string, string>()
         {
@@ -204,9 +234,17 @@ internal sealed class RabbitRunner : IDisposable
         };
         var containers = await dockerClient.Value.Containers.ListContainersAsync(listParameters);
 
-        return containers.Where(IsMatch)
-            .Select(c => c.ID)
-            .SingleOrDefault();
+        var containerResponse = containers.SingleOrDefault(IsMatch);
+        if (containerResponse is not null)
+        {
+            var isRunning = string.Equals(containerResponse.State, "running", StringComparison.OrdinalIgnoreCase);
+            var isConnected = containerResponse.NetworkSettings.Networks.Count > 0;
+            return (containerResponse.ID, isRunning, isConnected);
+        }
+        else
+        {
+            return default;
+        }
 
         bool IsMatch(ContainerListResponse container)
         {
@@ -216,7 +254,7 @@ internal sealed class RabbitRunner : IDisposable
         }
     }
 
-    private async Task<string> CreateContainer()
+    private async Task<ContainerStatus> CreateContainer()
     {
         var createContainerParameters = new CreateContainerParameters
         {
@@ -256,17 +294,18 @@ internal sealed class RabbitRunner : IDisposable
             }
         };
         var containerResponse = await dockerClient.Value.Containers.CreateContainerAsync(createContainerParameters);
-        return containerResponse.ID;
+        return (containerResponse.ID, false, true);
     }
 
-    private async Task<bool> WaitForInitialization()
+    private async Task<bool> WaitForInitialization(DateTimeOffset startTime)
     {
         const string searchText = "started TCP listener on [::]:5672";
         for (var timeout = DateTime.UtcNow.AddSeconds(30); DateTime.UtcNow <= timeout;)
         {
             var parameters = new ContainerLogsParameters
             {
-                ShowStdout = true
+                ShowStdout = true,
+                Since = startTime.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)
             };
             using var outputStream = await dockerClient.Value.Containers.GetContainerLogsAsync(containerId, false, parameters);
             var containerOutput = await outputStream.ReadOutputToEndAsync(default);

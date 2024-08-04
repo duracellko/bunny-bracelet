@@ -32,9 +32,4 @@ public class RabbitExchangeOptions
     /// Default value is false.
     /// </remarks>
     public bool AutoDelete { get; set; }
-
-    /// <summary>
-    /// Gets additional arguments of the RabbitMQ exchange.
-    /// </summary>
-    public IDictionary<string, object> Arguments { get; } = new Dictionary<string, object>();
 }

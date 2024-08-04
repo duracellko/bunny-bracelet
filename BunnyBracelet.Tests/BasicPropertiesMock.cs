@@ -20,7 +20,11 @@ namespace BunnyBracelet.Tests
 
         public string? MessageId { get; set; }
 
-        public bool Persistent { get; set; }
+        public bool Persistent
+        {
+            get => DeliveryMode == 2;
+            set => DeliveryMode = value ? (byte)2 : (byte)1;
+        }
 
         public byte Priority { get; set; }
 
