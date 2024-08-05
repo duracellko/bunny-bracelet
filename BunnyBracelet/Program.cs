@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace BunnyBracelet;
 
+/// <summary>
+/// Main entry-point to BunnyBracelet program.
+/// </summary>
 public static partial class Program
 {
     public const string ApplicationName = "BunnyBracelet";

@@ -5,6 +5,11 @@ using RabbitMQ.Client.Events;
 
 namespace BunnyBracelet;
 
+/// <summary>
+/// The object provides simple abstract operations to send a <see cref="Message"/>
+/// to RabbitMQ <see cref="RabbitOptions.InboundExchange"/> and consume Messages
+/// from <see cref="RabbitOptions.OutboundExchange"/>.
+/// </summary>
 public sealed class RabbitService : IDisposable
 {
     private readonly IOptions<RabbitOptions> options;
@@ -58,6 +63,12 @@ public sealed class RabbitService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a RabbitMQ connection channel for sending messages to RabbitMQ.
+    /// Single channel is used to send all messages. Therefore, sending messages
+    /// is not thread-safe. Consumer of this object must ensure to not send
+    /// 2 messages in parallel.
+    /// </summary>
     private IModel SendChannel
     {
         get
@@ -67,6 +78,9 @@ public sealed class RabbitService : IDisposable
 
             if (sendChannelStore is null)
             {
+                // Reusing the connectionLock. SendChannel is used only after
+                // the connection is created and then connectionLock is not
+                // required by connectionStore.
                 lock (connectionLock)
                 {
                     if (sendChannelStore is null)
@@ -125,6 +139,7 @@ public sealed class RabbitService : IDisposable
 
         logger.InitializingConsumer(exchangeName);
 
+        // Create separate channel for each consumer.
         var channel = Connection.CreateModel();
         try
         {
@@ -165,6 +180,7 @@ public sealed class RabbitService : IDisposable
             var sendChannel = sendChannelStore;
             if (sendChannel is not null)
             {
+                // No need to close the channel. All channels are closed with connection.
                 sendChannel.Dispose();
             }
 
@@ -225,6 +241,13 @@ public sealed class RabbitService : IDisposable
         ObjectDisposedException.ThrowIf(disposed, this);
     }
 
+    /// <summary>
+    /// Message consumer that consumes messages from specified exchange or queue.
+    /// Each message is sent to the specified delegate function. The function should
+    /// respond, whether the message should be acknowledged, rejected, or returned
+    /// back to the queue.
+    /// Consuming of messages is stopped by disposing this object.
+    /// </summary>
     private sealed class MessageConsumer : IDisposable
     {
         private readonly IModel channel;

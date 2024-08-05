@@ -1,5 +1,8 @@
 ﻿namespace BunnyBracelet;
 
+/// <summary>
+/// Configuration BunnyBracelet message relay service.
+/// </summary>
 public class RelayOptions
 {
     /// <summary>

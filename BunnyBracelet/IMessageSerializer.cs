@@ -1,11 +1,14 @@
 ﻿using RabbitMQ.Client;
 
-namespace BunnyBracelet
-{
-    public interface IMessageSerializer
-    {
-        ValueTask<Message> ReadMessage(Stream stream, Func<IBasicProperties> propertiesFactory);
+namespace BunnyBracelet;
 
-        ValueTask<Stream> ConvertMessageToStream(Message message);
-    }
+/// <summary>
+/// An object implementing this interface can deserialize a <see cref="Message"/>
+/// from a Stream or serialize a Message to Stream.
+/// </summary>
+public interface IMessageSerializer
+{
+    ValueTask<Message> ReadMessage(Stream stream, Func<IBasicProperties> propertiesFactory);
+
+    ValueTask<Stream> ConvertMessageToStream(Message message);
 }

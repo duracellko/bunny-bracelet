@@ -1,5 +1,8 @@
 ﻿namespace BunnyBracelet;
 
+/// <summary>
+/// Configuration of RabbitMQ queue.
+/// </summary>
 public class RabbitQueueOptions
 {
     /// <summary>

@@ -8,6 +8,10 @@ using RabbitMessage = (RabbitMQ.Client.IBasicProperties? properties, byte[] body
 
 namespace BunnyBracelet.SystemTests;
 
+/// <summary>
+/// This object manages connection to RabbitMQ and provides simple operations
+/// to publish and consume messages.
+/// </summary>
 internal sealed class RabbitConnection : IDisposable
 {
     private readonly Lazy<IConnection> connection;

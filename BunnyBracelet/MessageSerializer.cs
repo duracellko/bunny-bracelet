@@ -7,6 +7,21 @@ using RabbitMQ.Client;
 
 namespace BunnyBracelet;
 
+/// <summary>
+/// This object can deserialize a <see cref="Message"/> from a Stream or
+/// serialize a Message to Stream.
+/// </summary>
+/// <remarks>
+/// Serialized message is a binary format that always starts with RMQR encoded in ASCII and
+/// ends with byte 0. It contains sequence of sections and each section stores
+/// specific part of the message, e.g. basic property or body content.
+/// First byte of each section identifies type of section and and what part of the message
+/// is stored in the section.
+///
+/// All multi-byte values are stored in little-endian order.
+/// All strings are encoded in UTF-8 and starts with integer that specifies number of bytes
+/// used for the string. Strings containing null-terminating character 0x00 are not allowed.
+/// </remarks>
 [SuppressMessage("StyleCop.CSharp.ReadabilityRules", "SA1124:Do not use regions", Justification = "Reading and writing is implemented in the same class.")]
 public class MessageSerializer : IMessageSerializer
 {
@@ -566,6 +581,7 @@ public class MessageSerializer : IMessageSerializer
 
     private static void WriteBody(PipeWriter writer, ReadOnlyMemory<byte> body)
     {
+        // 1 byte = code, 4 bytes body length
         var buffer = writer.GetMemory(5 + body.Length);
         buffer.Span[0] = Codes.Body;
         buffer = buffer.Slice(1);

@@ -3,6 +3,9 @@ using Microsoft.Extensions.Options;
 
 namespace BunnyBracelet;
 
+/// <summary>
+/// Health check that reports status of the message relay service (<see cref="RelayHostedService"/>).
+/// </summary>
 public class RelayHealthCheck : IHealthCheck
 {
     private const string RelayDisabledDescription = Program.ApplicationName + " relay is disabled by configuration.";

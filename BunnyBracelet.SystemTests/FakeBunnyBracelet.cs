@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 
 namespace BunnyBracelet.SystemTests;
 
+/// <summary>
+/// Fake BunnyBracelet web server that simulates '/message' endpoint
+/// that does not respond in 30 seconds.
+/// </summary>
 internal sealed class FakeBunnyBracelet : IAsyncDisposable
 {
     private WebApplication? application;

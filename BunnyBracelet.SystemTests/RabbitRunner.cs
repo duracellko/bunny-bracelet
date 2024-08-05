@@ -8,6 +8,18 @@ using ContainerStatus = (string? id, bool isRunning, bool isConnected);
 
 namespace BunnyBracelet.SystemTests;
 
+/// <summary>
+/// This object controls an instance of RabbitMQ Docker container.
+/// It manages the lifetime and also provides operations to simulate
+/// network disruption.
+/// </summary>
+/// <remarks>
+/// RabbitMQ containers are reused in the same environment identified
+/// by <see cref="EnvironmentId"/>. Starting of a RabbitMQ container takes
+/// approx. 10 seconds. Therefore, reusing of the containers in all tests
+/// reduces time of the tests. The environment should be reset and cleaned
+/// after end of a test set (<see cref="ClassCleanupAttribute"/>).
+/// </remarks>
 internal sealed class RabbitRunner : IDisposable
 {
     private const string Image = "rabbitmq:3.13";
@@ -99,6 +111,10 @@ internal sealed class RabbitRunner : IDisposable
         }
     }
 
+    /// <summary>
+    /// Removes all containers, which have BunnyBracelet-Environment label,
+    /// but the value is different from current <see cref="EnvironmentId"/>.
+    /// </summary>
     public async Task Cleanup()
     {
         var filters = new Dictionary<string, string>()

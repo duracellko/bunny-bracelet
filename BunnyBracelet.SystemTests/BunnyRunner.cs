@@ -7,6 +7,13 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace BunnyBracelet.SystemTests;
 
+/// <summary>
+/// This object controls an instance of BunnyBracelet program
+/// that is object of the system tests.
+/// </summary>
+/// <remarks>
+/// Additionally it provides console output of the BunnyBracelet program.
+/// </remarks>
 internal sealed class BunnyRunner : IAsyncDisposable
 {
 #if DEBUG

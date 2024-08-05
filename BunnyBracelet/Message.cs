@@ -2,6 +2,11 @@
 
 namespace BunnyBracelet;
 
+/// <summary>
+/// This value object represents a Message that could be put into a RabbitMQ queue
+/// or picked up from a queue. The message includes metadata (<see cref="Properties"/>),
+/// custom headers, and binary content (<see cref="Body"/>).
+/// </summary>
 public struct Message : IEquatable<Message>
 {
     public Message(ReadOnlyMemory<byte> body, IBasicProperties? properties)

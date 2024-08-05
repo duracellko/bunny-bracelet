@@ -4,6 +4,12 @@ using Microsoft.Extensions.Options;
 
 namespace BunnyBracelet;
 
+/// <summary>
+/// ASP.NET Core application background service that consumes
+/// <see cref="Message"/> objects from configured
+/// <see cref="RabbitOptions.OutboundExchange"/> and forwards them
+/// to configured BunnyBracelet endpoints.
+/// </summary>
 public class RelayHostedService : IHostedService
 {
     private readonly RabbitService rabbitService;
@@ -130,6 +136,9 @@ public class RelayHostedService : IHostedService
         catch (Exception ex)
         {
             logger.ErrorRelayingMessage(ex, endpoint, exchangeName, message.Properties, message.Body.Length, responseContent);
+
+            // Delay returning of the message back to the queue, so that retry to forward the message
+            // is done after some delay. This avoids excessive usage of CPU and network.
             await Task.Delay(options.Value.RequeueDelay);
             return ProcessMessageResult.Requeue;
         }

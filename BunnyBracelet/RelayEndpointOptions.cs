@@ -1,5 +1,11 @@
 ﻿namespace BunnyBracelet;
 
+/// <summary>
+/// Configuration of a connection to another instance of BunnyBracelet.
+/// <see cref="Message"/> objects should be relayed/forwarded from
+/// <see cref="RabbitOptions.OutboundExchange"/> to this endpoint
+/// of another BunnyBracelet.
+/// </summary>
 public class RelayEndpointOptions
 {
     /// <summary>

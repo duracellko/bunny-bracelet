@@ -2,6 +2,9 @@
 
 namespace BunnyBracelet;
 
+/// <summary>
+/// Configuration of RabbitMQ exchange.
+/// </summary>
 public class RabbitExchangeOptions
 {
     /// <summary>

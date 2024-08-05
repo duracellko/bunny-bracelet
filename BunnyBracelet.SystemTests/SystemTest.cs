@@ -89,7 +89,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2);
+            await PutBunniesDown(bunny1, bunny2);
         }
     }
 
@@ -135,7 +135,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2, bunny3);
+            await PutBunniesDown(bunny1, bunny2, bunny3);
         }
     }
 
@@ -198,7 +198,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2, bunny3);
+            await PutBunniesDown(bunny1, bunny2, bunny3);
         }
 
         static List<RabbitMessage> CreateMessages(RabbitConnection connection, string prefix)
@@ -293,7 +293,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2);
+            await PutBunniesDown(bunny1, bunny2);
         }
     }
 
@@ -347,7 +347,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2);
+            await PutBunniesDown(bunny1, bunny2);
         }
     }
 
@@ -437,7 +437,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2);
+            await PutBunniesDown(bunny1, bunny2);
         }
 
         static ExchangeSettings CreateExchangeSettings(string prefix)
@@ -541,7 +541,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2);
+            await PutBunniesDown(bunny1, bunny2);
         }
     }
 
@@ -615,7 +615,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2);
+            await PutBunniesDown(bunny1, bunny2);
         }
     }
 
@@ -654,12 +654,12 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny);
+            await PutBunniesDown(bunny);
         }
     }
 
     [TestMethod]
-    public async Task ShouldReturn403ForbiddenWhenNoInboundExchangeConfigured()
+    public async Task ShouldReturn403ForbiddenWhenInboundExchangeIsNotConfigured()
     {
         using var rabbit1 = new RabbitRunner(5673);
         await using var bunny = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
@@ -685,7 +685,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny);
+            await PutBunniesDown(bunny);
         }
     }
 
@@ -715,7 +715,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny);
+            await PutBunniesDown(bunny);
         }
     }
 
@@ -772,7 +772,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2, bunny3);
+            await PutBunniesDown(bunny1, bunny2, bunny3);
         }
 
         static EndpointSettings CreateEndpointSettings(int? port)
@@ -808,12 +808,12 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny);
+            await PutBunniesDown(bunny);
         }
     }
 
     [TestMethod]
-    public async Task TwoEndpointsOnTheSameQueueRelaysMessageOnlyToOne()
+    public async Task TwoEndpointsOnTheSameQueueRelayMessageOnlyToOne()
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
@@ -860,7 +860,7 @@ public class SystemTest
         }
         finally
         {
-            await KillBunnies(bunny1, bunny2, bunny3);
+            await PutBunniesDown(bunny1, bunny2, bunny3);
         }
 
         static EndpointSettings CreateEndpointSettings(int port, string queue)
@@ -936,11 +936,12 @@ public class SystemTest
         finally
         {
             await rabbit2.ConnectContainerToNetwork();
-            await KillBunnies(bunny1, bunny2);
+            await PutBunniesDown(bunny1, bunny2);
         }
     }
 
-    private static async Task KillBunnies(params BunnyRunner[] bunnies)
+    // Disclaimer: No bunnies get harmed by running this method or any of these tests.
+    private static async Task PutBunniesDown(params BunnyRunner[] bunnies)
     {
         for (int i = 0; i < bunnies.Length; i++)
         {

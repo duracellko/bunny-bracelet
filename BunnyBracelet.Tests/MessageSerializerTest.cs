@@ -285,6 +285,53 @@ namespace BunnyBracelet.Tests
             AssertMessagesAreEqual(message, deserializedMessage);
         }
 
+        [TestMethod]
+        public async Task WriteAndRead_PropertiesAndBodyAreDuplicatedWithDifferentValues()
+        {
+            var properties = new BasicPropertiesMock
+            {
+                AppId = "Test application",
+                ClusterId = "Cluster tested",
+                ContentEncoding = "Unicode",
+                ContentType = "application/json",
+                CorrelationId = Guid.NewGuid().ToString(),
+                DeliveryMode = 2,
+                Expiration = "tomorrow",
+                Headers = new Dictionary<string, object>(),
+                MessageId = Guid.NewGuid().ToString(),
+                Persistent = true,
+                Priority = 129,
+                ReplyTo = "return address",
+                ReplyToAddress = new PublicationAddress("Topic", "return exchange", "test/channel"),
+                Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),
+                Type = "Test message",
+                UserId = "duracellko"
+            };
+            var message1 = new Message(Guid.NewGuid().ToByteArray(), properties);
+            var message1Bytes = await SerializeMessage(message1);
+
+            var message2 = CreateSampleMessage();
+            var message2Bytes = await SerializeMessage(message2);
+
+            // Combine bytes of message 1 and 2, but do not repeat
+            // preamble (4-bytes) and message end (1 byte).
+            var messageBytes = new byte[message1Bytes.Length + message2Bytes.Length - 5];
+            message1Bytes.CopyTo(messageBytes, 0);
+
+            // Overwrite last byte (end of message) of message 1.
+            message2Bytes.AsMemory().Slice(4)
+                .CopyTo(messageBytes.AsMemory().Slice(message1Bytes.Length - 1));
+
+            var deserializedMessage = await DeserializeMessage(messageBytes);
+
+            var expectedMessage = new Message(message2.Body, message1.Properties);
+            expectedMessage.Properties!.MessageId = message2.Properties!.MessageId;
+            expectedMessage.Properties.Timestamp = message2.Properties.Timestamp;
+            expectedMessage.Properties.Type = message2.Properties.Type;
+
+            AssertMessagesAreEqual(expectedMessage, deserializedMessage);
+        }
+
         private static async Task TestMessageSerializationAndDeserialization(Message message)
         {
             var serializedMessage = await SerializeMessage(message);

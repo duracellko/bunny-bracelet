@@ -1,5 +1,8 @@
 ﻿namespace BunnyBracelet;
 
+/// <summary>
+/// Configuration of RabbitMQ connection.
+/// </summary>
 public class RabbitOptions
 {
     private static readonly Uri DefaultRabbitMQUri = new Uri("ampq://localhost/");

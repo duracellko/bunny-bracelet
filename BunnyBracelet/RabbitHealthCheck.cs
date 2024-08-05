@@ -2,6 +2,9 @@
 
 namespace BunnyBracelet;
 
+/// <summary>
+/// Health check that reports status of RabbitMQ connection.
+/// </summary>
 public class RabbitHealthCheck : IHealthCheck
 {
     private const string HealthyDescription = "RabbitMQ connection is healthy.";

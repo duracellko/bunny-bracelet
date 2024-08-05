@@ -47,7 +47,7 @@ public class MessageTest
     }
 
     [TestMethod]
-    public void Constructor_InstancesValues_PropertiesAreSet()
+    public void Constructor_InstancesAsValues_PropertiesAreSet()
     {
         var body = new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 });
         var properties = new BasicPropertiesMock();
