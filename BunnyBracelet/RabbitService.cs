@@ -25,6 +25,20 @@ public sealed class RabbitService : IDisposable
         this.logger = logger;
     }
 
+    public bool IsConnected
+    {
+        get
+        {
+            var connection = connectionStore;
+            if (connection is null)
+            {
+                connection = Volatile.Read(ref connectionStore);
+            }
+
+            return connection is not null && connection.IsOpen;
+        }
+    }
+
     private IConnection Connection
     {
         get

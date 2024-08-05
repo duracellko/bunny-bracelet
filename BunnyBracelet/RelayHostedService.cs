@@ -37,6 +37,8 @@ public class RelayHostedService : IHostedService
         this.logger = logger;
     }
 
+    public int ConsumersCount => consumers.Count;
+
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "On error continue setup of other endpoints.")]
     public Task StartAsync(CancellationToken cancellationToken)
     {

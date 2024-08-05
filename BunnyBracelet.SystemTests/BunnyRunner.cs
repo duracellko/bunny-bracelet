@@ -1,7 +1,9 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace BunnyBracelet.SystemTests;
 
@@ -218,6 +220,20 @@ internal sealed class BunnyRunner : IAsyncDisposable
         {
             return output.ToString();
         }
+    }
+
+    public async Task<HealthStatus> GetHealthStatus()
+    {
+        using var httpClient = new HttpClient();
+        httpClient.BaseAddress = new Uri(Uri);
+        var response = await httpClient.GetAsync(new Uri("/health", UriKind.Relative));
+
+        return response.StatusCode switch
+        {
+            HttpStatusCode.OK => HealthStatus.Healthy,
+            HttpStatusCode.ServiceUnavailable => HealthStatus.Unhealthy,
+            _ => throw new InvalidOperationException($"Unexpected health-check HTTP status code {response.StatusCode}.")
+        };
     }
 
     public async ValueTask DisposeAsync()
