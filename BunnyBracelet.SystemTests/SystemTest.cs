@@ -235,6 +235,97 @@ public class SystemTest
     }
 
     [TestMethod]
+    public async Task SendMessageWithAllHeaderValueTypes()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        using var rabbit2 = new RabbitRunner(5674);
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, outboundExchange: string.Empty, endpointPort: 5001);
+
+        await rabbit1.Cleanup();
+        await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
+        await Task.WhenAll(bunny1.Start(), bunny2.Start());
+
+        try
+        {
+            await AssertHealthy(bunny1);
+            await AssertUnhealthy(bunny2);
+
+            using var connection1 = rabbit1.CreateConnection();
+
+            using var connection2 = rabbit2.CreateConnection();
+            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
+            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+
+            var properties = connection1.CreateProperties();
+            properties.Headers = CreateHeaders();
+
+            var messageContent = GetRandomBytes(5000000);
+            connection1.Publish(bunny1.OutboundExchange.Name!, properties, messageContent);
+
+            await AssertMessageInQueue(queue2, (properties, messageContent), 1);
+            await AssertHealthy(bunny1, bunny2);
+        }
+        finally
+        {
+            await PutBunniesDown(bunny1, bunny2);
+        }
+
+        static Dictionary<string, object> CreateHeaders()
+        {
+            var headers = new Dictionary<string, object>();
+            headers.Add("test binary", Encoding.UTF8.GetBytes("My test binary value"));
+            headers.Add("test boolean", true);
+            headers.Add("test byte", (byte)22);
+            headers.Add("test int16", short.MinValue);
+            headers.Add("test int32", int.MinValue);
+            headers.Add("test int64", long.MinValue);
+            headers.Add("test uint16", ushort.MaxValue);
+            headers.Add("test uint32", uint.MaxValue);
+            headers.Add("test single", 123.456f);
+            headers.Add("test double", 987654e-56);
+            headers.Add("test decimal", 12345.6789m);
+            headers.Add("test timestamp", new AmqpTimestamp(DateTimeOffset.Now.ToUnixTimeSeconds()));
+
+            var innerList = new List<object>
+            {
+                (byte)255,
+                -1234567890123456789,
+                GetRandomBytes(5000),
+                false,
+                true,
+                double.MaxValue,
+                double.MinValue,
+                double.Epsilon,
+                double.E,
+                default(AmqpTimestamp)
+            };
+
+            var list = new List<object>
+            {
+                new AmqpTimestamp(DateTimeOffset.UtcNow.AddMonths(-10).ToUnixTimeSeconds()),
+                false,
+                22m,
+                123456e78,
+                3.33e-33f,
+                2025u,
+                (ushort)2026,
+                2027L,
+                2028,
+                (short)2029,
+                (byte)0,
+                false,
+                innerList,
+                Guid.NewGuid().ToByteArray()
+            };
+
+            headers.Add("test list", list);
+
+            return headers;
+        }
+    }
+
+    [TestMethod]
     public async Task NetworkDisconnectedOnSecondMessage()
     {
         using var rabbit1 = new RabbitRunner(5673);
@@ -298,7 +389,6 @@ public class SystemTest
     }
 
     [TestMethod]
-    [SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "Random is sufficient for test data.")]
     public async Task TooLargeMessage()
     {
         using var rabbit1 = new RabbitRunner(5673);
@@ -331,10 +421,7 @@ public class SystemTest
             properties.MessageId = Guid.NewGuid().ToString();
 
             // Maximum HTTP request size in ASP.NET Core
-            var body = new byte[30000000];
-            var random = new Random();
-            random.NextBytes(body);
-
+            var body = GetRandomBytes(30000000);
             connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
 
             await WaitForLogOutput(bunny1, "Message rejected by consumer");
@@ -1050,5 +1137,14 @@ public class SystemTest
                 Assert.IsTrue(collection[i - 1].CompareTo(collection[i]) < 0, "Unexpected order '{0}' > '{1}'.", collection[i - 1], collection[i]);
             }
         }
+    }
+
+    [SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "Random is sufficient for test data.")]
+    private static byte[] GetRandomBytes(int length)
+    {
+        var result = new byte[length];
+        var random = new Random();
+        random.NextBytes(result);
+        return result;
     }
 }

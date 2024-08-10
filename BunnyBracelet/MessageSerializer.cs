@@ -92,12 +92,7 @@ public class MessageSerializer : IMessageSerializer
             var state = new MessageParsingState(propertiesFactory);
             while (!state.IsCompleted)
             {
-                readResult = await reader.ReadAsync();
-                buffer = readResult.Buffer;
-                byte code = 0;
-                buffer.Slice(0, 1).CopyTo(new Span<byte>(ref code));
-                buffer = buffer.Slice(1);
-                reader.AdvanceTo(buffer.Start);
+                var code = await ReadByte(reader);
 
                 switch (code)
                 {
@@ -162,12 +157,7 @@ public class MessageSerializer : IMessageSerializer
             throw new MessageException("BasicProperties code should preceed Property code.");
         }
 
-        var readResult = await reader.ReadAsync();
-        var buffer = readResult.Buffer;
-        byte propertyCode = 0;
-        buffer.Slice(0, 1).CopyTo(new Span<byte>(ref propertyCode));
-        buffer = buffer.Slice(1);
-        reader.AdvanceTo(buffer.Start);
+        var propertyCode = await ReadByte(reader);
 
         switch (propertyCode)
         {
@@ -205,7 +195,7 @@ public class MessageSerializer : IMessageSerializer
                 state.Properties.ReplyToAddress = await ReadPublicationAddress(reader);
                 break;
             case PropertyCodes.Timestamp:
-                state.Properties.Timestamp = new AmqpTimestamp(await ReadLong(reader));
+                state.Properties.Timestamp = await ReadTimestamp(reader);
                 break;
             case PropertyCodes.Type:
                 state.Properties.Type = await ReadString(reader);
@@ -226,20 +216,58 @@ public class MessageSerializer : IMessageSerializer
         }
 
         var key = await ReadString(reader);
-        var value = await ReadByteArray(reader);
+        var value = await ReadHeaderValue(reader);
         state.AddHeader(key, value);
+    }
+
+    private static async ValueTask<object> ReadHeaderValue(PipeReader reader)
+    {
+        var valueTypeCode = await ReadByte(reader);
+        switch (valueTypeCode)
+        {
+            case ValueTypeCodes.ByteArray:
+                return await ReadByteArray(reader);
+            case ValueTypeCodes.Boolean:
+                return await ReadBoolean(reader);
+            case ValueTypeCodes.Byte:
+                return await ReadByte(reader);
+            case ValueTypeCodes.Int16:
+                return await ReadInt16(reader);
+            case ValueTypeCodes.Int32:
+                return await ReadInt32(reader);
+            case ValueTypeCodes.Int64:
+                return await ReadInt64(reader);
+            case ValueTypeCodes.UInt16:
+                return await ReadUInt16(reader);
+            case ValueTypeCodes.UInt32:
+                return await ReadUInt32(reader);
+            case ValueTypeCodes.UInt64:
+                return await ReadUInt64(reader);
+            case ValueTypeCodes.Single:
+                return await ReadSingle(reader);
+            case ValueTypeCodes.Double:
+                return await ReadDouble(reader);
+            case ValueTypeCodes.Decimal:
+                return await ReadDecimal(reader);
+            case ValueTypeCodes.String:
+                return await ReadString(reader);
+            case ValueTypeCodes.Timestamp:
+                return await ReadTimestamp(reader);
+            case ValueTypeCodes.List:
+                return await ReadList(reader);
+            default:
+                throw new MessageException($"Unexpected header value type code {valueTypeCode}.");
+        }
     }
 
     private static async ValueTask<string> ReadString(PipeReader reader)
     {
         const byte nullTerminator = 0;
 
-        var readResult = await reader.ReadAtLeastAsync(4);
-        var stringLength = GetStringLength(readResult.Buffer);
-        reader.AdvanceTo(readResult.Buffer.Slice(4).Start);
-
-        readResult = await reader.ReadAtLeastAsync(stringLength);
+        var stringLength = await ReadInt32(reader);
+        var readResult = await reader.ReadAtLeastAsync(stringLength);
         var stringBuffer = readResult.Buffer.Slice(0, stringLength);
+
         if (stringBuffer.PositionOf(nullTerminator).HasValue)
         {
             throw new MessageException("A string inside the message contains unallowed null terminator character (0).");
@@ -248,13 +276,15 @@ public class MessageSerializer : IMessageSerializer
         var result = TextEncoding.GetString(stringBuffer);
         reader.AdvanceTo(readResult.Buffer.Slice(stringLength).Start);
         return result;
+    }
 
-        static int GetStringLength(ReadOnlySequence<byte> buffer)
-        {
-            Span<byte> stringLengthBytes = stackalloc byte[4];
-            buffer.Slice(0, 4).CopyTo(stringLengthBytes);
-            return BinaryPrimitives.ReadInt32LittleEndian(stringLengthBytes);
-        }
+    private static async ValueTask<bool> ReadBoolean(PipeReader reader)
+    {
+        var readResult = await reader.ReadAsync();
+        byte value = 0;
+        readResult.Buffer.Slice(0, 1).CopyTo(new Span<byte>(ref value));
+        reader.AdvanceTo(readResult.Buffer.Slice(1).Start);
+        return value != 0;
     }
 
     private static async ValueTask<byte> ReadByte(PipeReader reader)
@@ -266,14 +296,44 @@ public class MessageSerializer : IMessageSerializer
         return value;
     }
 
-    private static async ValueTask<long> ReadLong(PipeReader reader)
+    private static async ValueTask<short> ReadInt16(PipeReader reader)
+    {
+        var readResult = await reader.ReadAtLeastAsync(2);
+        var result = GetInt16(readResult.Buffer);
+        reader.AdvanceTo(readResult.Buffer.Slice(2).Start);
+        return result;
+
+        static short GetInt16(ReadOnlySequence<byte> buffer)
+        {
+            Span<byte> resultBytes = stackalloc byte[2];
+            buffer.Slice(0, 2).CopyTo(resultBytes);
+            return BinaryPrimitives.ReadInt16LittleEndian(resultBytes);
+        }
+    }
+
+    private static async ValueTask<int> ReadInt32(PipeReader reader)
+    {
+        var readResult = await reader.ReadAtLeastAsync(4);
+        var result = GetInt32(readResult.Buffer);
+        reader.AdvanceTo(readResult.Buffer.Slice(4).Start);
+        return result;
+
+        static int GetInt32(ReadOnlySequence<byte> buffer)
+        {
+            Span<byte> resultBytes = stackalloc byte[4];
+            buffer.Slice(0, 4).CopyTo(resultBytes);
+            return BinaryPrimitives.ReadInt32LittleEndian(resultBytes);
+        }
+    }
+
+    private static async ValueTask<long> ReadInt64(PipeReader reader)
     {
         var readResult = await reader.ReadAtLeastAsync(8);
-        var result = GetLong(readResult.Buffer);
+        var result = GetInt64(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(8).Start);
         return result;
 
-        static long GetLong(ReadOnlySequence<byte> buffer)
+        static long GetInt64(ReadOnlySequence<byte> buffer)
         {
             Span<byte> resultBytes = stackalloc byte[8];
             buffer.Slice(0, 8).CopyTo(resultBytes);
@@ -281,24 +341,135 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<byte[]> ReadByteArray(PipeReader reader)
+    private static async ValueTask<ushort> ReadUInt16(PipeReader reader)
+    {
+        var readResult = await reader.ReadAtLeastAsync(2);
+        var result = GetUInt16(readResult.Buffer);
+        reader.AdvanceTo(readResult.Buffer.Slice(2).Start);
+        return result;
+
+        static ushort GetUInt16(ReadOnlySequence<byte> buffer)
+        {
+            Span<byte> resultBytes = stackalloc byte[2];
+            buffer.Slice(0, 2).CopyTo(resultBytes);
+            return BinaryPrimitives.ReadUInt16LittleEndian(resultBytes);
+        }
+    }
+
+    private static async ValueTask<uint> ReadUInt32(PipeReader reader)
     {
         var readResult = await reader.ReadAtLeastAsync(4);
-        var length = GetLength(readResult.Buffer);
+        var result = GetUInt32(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(4).Start);
+        return result;
 
-        readResult = await reader.ReadAtLeastAsync(length);
+        static uint GetUInt32(ReadOnlySequence<byte> buffer)
+        {
+            Span<byte> resultBytes = stackalloc byte[4];
+            buffer.Slice(0, 4).CopyTo(resultBytes);
+            return BinaryPrimitives.ReadUInt32LittleEndian(resultBytes);
+        }
+    }
+
+    private static async ValueTask<ulong> ReadUInt64(PipeReader reader)
+    {
+        var readResult = await reader.ReadAtLeastAsync(8);
+        var result = GetUInt64(readResult.Buffer);
+        reader.AdvanceTo(readResult.Buffer.Slice(8).Start);
+        return result;
+
+        static ulong GetUInt64(ReadOnlySequence<byte> buffer)
+        {
+            Span<byte> resultBytes = stackalloc byte[8];
+            buffer.Slice(0, 8).CopyTo(resultBytes);
+            return BinaryPrimitives.ReadUInt64LittleEndian(resultBytes);
+        }
+    }
+
+    private static async ValueTask<float> ReadSingle(PipeReader reader)
+    {
+        var readResult = await reader.ReadAtLeastAsync(4);
+        var result = GetSingle(readResult.Buffer);
+        reader.AdvanceTo(readResult.Buffer.Slice(4).Start);
+        return result;
+
+        static float GetSingle(ReadOnlySequence<byte> buffer)
+        {
+            Span<byte> resultBytes = stackalloc byte[4];
+            buffer.Slice(0, 4).CopyTo(resultBytes);
+            return BinaryPrimitives.ReadSingleLittleEndian(resultBytes);
+        }
+    }
+
+    private static async ValueTask<double> ReadDouble(PipeReader reader)
+    {
+        var readResult = await reader.ReadAtLeastAsync(8);
+        var result = GetDouble(readResult.Buffer);
+        reader.AdvanceTo(readResult.Buffer.Slice(8).Start);
+        return result;
+
+        static double GetDouble(ReadOnlySequence<byte> buffer)
+        {
+            Span<byte> resultBytes = stackalloc byte[8];
+            buffer.Slice(0, 8).CopyTo(resultBytes);
+            return BinaryPrimitives.ReadDoubleLittleEndian(resultBytes);
+        }
+    }
+
+    private static async ValueTask<decimal> ReadDecimal(PipeReader reader)
+    {
+        var readResult = await reader.ReadAtLeastAsync(16);
+        var result = ReadDecimal(readResult.Buffer);
+        reader.AdvanceTo(readResult.Buffer.Slice(16).Start);
+        return result;
+
+        static decimal ReadDecimal(ReadOnlySequence<byte> buffer)
+        {
+            Span<byte> bytesBuffer = stackalloc byte[4];
+            Span<int> intBuffer = stackalloc int[4];
+
+            buffer.Slice(0, 4).CopyTo(bytesBuffer);
+            intBuffer[0] = BinaryPrimitives.ReadInt32LittleEndian(bytesBuffer);
+            buffer = buffer.Slice(4);
+            buffer.Slice(0, 4).CopyTo(bytesBuffer);
+            intBuffer[1] = BinaryPrimitives.ReadInt32LittleEndian(bytesBuffer);
+            buffer = buffer.Slice(4);
+            buffer.Slice(0, 4).CopyTo(bytesBuffer);
+            intBuffer[2] = BinaryPrimitives.ReadInt32LittleEndian(bytesBuffer);
+            buffer = buffer.Slice(4);
+            buffer.Slice(0, 4).CopyTo(bytesBuffer);
+            intBuffer[3] = BinaryPrimitives.ReadInt32LittleEndian(bytesBuffer);
+
+            return new decimal(intBuffer);
+        }
+    }
+
+    private static async ValueTask<byte[]> ReadByteArray(PipeReader reader)
+    {
+        var length = await ReadInt32(reader);
+        var readResult = await reader.ReadAtLeastAsync(length);
         var result = new byte[length];
         readResult.Buffer.Slice(0, length).CopyTo(result);
         reader.AdvanceTo(readResult.Buffer.Slice(length).Start);
         return result;
+    }
 
-        static int GetLength(ReadOnlySequence<byte> buffer)
+    private static async ValueTask<AmqpTimestamp> ReadTimestamp(PipeReader reader)
+    {
+        return new AmqpTimestamp(await ReadInt64(reader));
+    }
+
+    private static async ValueTask<IReadOnlyList<object>> ReadList(PipeReader reader)
+    {
+        var itemsCount = await ReadInt32(reader);
+        var result = new List<object>(itemsCount);
+
+        for (int i = 0; i < itemsCount; i++)
         {
-            Span<byte> lengthBytes = stackalloc byte[4];
-            buffer.Slice(0, 4).CopyTo(lengthBytes);
-            return BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
+            result.Add(await ReadHeaderValue(reader));
         }
+
+        return result;
     }
 
     private static async ValueTask<PublicationAddress> ReadPublicationAddress(PipeReader reader)
@@ -331,6 +502,7 @@ public class MessageSerializer : IMessageSerializer
 
     #region ConvertMessageToStream
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "All exceptions are reported to reader.")]
     private static async void WriteMessageToPipeline(Message message, PipeWriter writer)
     {
         try
@@ -345,10 +517,11 @@ public class MessageSerializer : IMessageSerializer
             WriteBody(writer, message.Body);
             WriteEndOfMesage(writer);
             await writer.FlushAsync();
-        }
-        finally
-        {
             await writer.CompleteAsync();
+        }
+        catch (Exception ex)
+        {
+            await writer.CompleteAsync(ex);
         }
     }
 
@@ -448,7 +621,9 @@ public class MessageSerializer : IMessageSerializer
             await writer.FlushAsync();
         }
 
-        if (properties.IsHeadersPresent())
+        // When publishing a message via RabbitMQ Management page,
+        // then the message has IsHeadersPresent set to true, but Headers property is null.
+        if (properties.IsHeadersPresent() && properties.Headers is not null)
         {
             await WriteHeaders(properties.Headers, writer);
             await writer.FlushAsync();
@@ -464,16 +639,12 @@ public class MessageSerializer : IMessageSerializer
 
     private static void WriteProperty(PipeWriter writer, byte code, string value)
     {
-        // 2 bytes = codes, 4 bytes = string length, 4 bytes per character
-        // 4 bytes per character is very conservative for UTF-8
-        var buffer = writer.GetSpan(2 + 4 + (value.Length * 4));
-
+        var buffer = writer.GetSpan(2);
         buffer[0] = Codes.Property;
         buffer[1] = code;
-        buffer = buffer.Slice(2);
+        writer.Advance(2);
 
-        var bytesCount = WriteString(value, buffer);
-        writer.Advance(2 + bytesCount);
+        WriteString(writer, value);
     }
 
     private static void WriteProperty(PipeWriter writer, byte code, byte value)
@@ -497,57 +668,42 @@ public class MessageSerializer : IMessageSerializer
 
     private static void WritePublicationAddress(PipeWriter writer, byte code, PublicationAddress value)
     {
-        // 2 bytes = codes, 1 byte = null flags, 4 bytes = string length, 4 bytes per character
-        // 4 bytes per character is very conservative for UTF-8
-        int bufferRequestSize = 3;
         byte valueFlags = 0;
         if (value.ExchangeType is not null)
         {
-            bufferRequestSize += 4 + (value.ExchangeType.Length * 4);
             valueFlags |= 1;
         }
 
         if (value.ExchangeName is not null)
         {
-            bufferRequestSize += 4 + (value.ExchangeName.Length * 4);
             valueFlags |= 2;
         }
 
         if (value.RoutingKey is not null)
         {
-            bufferRequestSize += 4 + (value.RoutingKey.Length * 4);
             valueFlags |= 4;
         }
 
-        var buffer = writer.GetSpan(bufferRequestSize);
+        var buffer = writer.GetSpan(3);
         buffer[0] = Codes.Property;
         buffer[1] = code;
         buffer[2] = valueFlags;
-        buffer = buffer.Slice(3);
-        int bytesCount = 3;
+        writer.Advance(3);
 
         if (value.ExchangeType is not null)
         {
-            var stringBytesCount = WriteString(value.ExchangeType, buffer);
-            buffer = buffer.Slice(stringBytesCount);
-            bytesCount += stringBytesCount;
+            WriteString(writer, value.ExchangeType);
         }
 
         if (value.ExchangeName is not null)
         {
-            var stringBytesCount = WriteString(value.ExchangeName, buffer);
-            buffer = buffer.Slice(stringBytesCount);
-            bytesCount += stringBytesCount;
+            WriteString(writer, value.ExchangeName);
         }
 
         if (value.RoutingKey is not null)
         {
-            var stringBytesCount = WriteString(value.RoutingKey, buffer);
-            buffer = buffer.Slice(stringBytesCount);
-            bytesCount += stringBytesCount;
+            WriteString(writer, value.RoutingKey);
         }
-
-        writer.Advance(bytesCount);
     }
 
     private static async ValueTask WriteHeaders(IDictionary<string, object> headers, PipeWriter writer)
@@ -561,22 +717,99 @@ public class MessageSerializer : IMessageSerializer
 
     private static void WriteHeader(PipeWriter writer, string key, object value)
     {
-        var valueBytes = (byte[])value;
-
-        // 1 byte = code, 4 bytes string length, 4 bytes per character, 4 bytes = value length
-        var buffer = writer.GetSpan(9 + (key.Length * 4) + valueBytes.Length);
+        var buffer = writer.GetSpan(1);
         buffer[0] = Codes.Header;
-        buffer = buffer.Slice(1);
+        writer.Advance(1);
 
-        var bytesCount = WriteString(key, buffer);
-        buffer = buffer.Slice(bytesCount);
+        WriteString(writer, key);
+        WriteHeaderValue(writer, value);
+    }
 
-        BinaryPrimitives.WriteInt32LittleEndian(buffer, valueBytes.Length);
-        buffer = buffer.Slice(4);
-        valueBytes.CopyTo(buffer);
+    private static void WriteHeaderValue(PipeWriter writer, object value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
 
-        // 4 bytes of string length is counted in bytesCount
-        writer.Advance(5 + bytesCount + valueBytes.Length);
+        // Most likely type is string, but that is encoded as array.
+        // So it is checked first.
+        if (value is byte[] byteArrayValue)
+        {
+            WriteByte(writer, ValueTypeCodes.ByteArray);
+            WriteByteArray(writer, byteArrayValue);
+        }
+        else if (value is bool booleanValue)
+        {
+            WriteByte(writer, ValueTypeCodes.Boolean);
+            WriteBoolean(writer, booleanValue);
+        }
+        else if (value is byte byteValue)
+        {
+            WriteByte(writer, ValueTypeCodes.Byte);
+            WriteByte(writer, byteValue);
+        }
+        else if (value is short int16Value)
+        {
+            WriteByte(writer, ValueTypeCodes.Int16);
+            WriteInt16(writer, int16Value);
+        }
+        else if (value is int int32Value)
+        {
+            WriteByte(writer, ValueTypeCodes.Int32);
+            WriteInt32(writer, int32Value);
+        }
+        else if (value is long int64Value)
+        {
+            WriteByte(writer, ValueTypeCodes.Int64);
+            WriteInt64(writer, int64Value);
+        }
+        else if (value is ushort uint16Value)
+        {
+            WriteByte(writer, ValueTypeCodes.UInt16);
+            WriteUInt16(writer, uint16Value);
+        }
+        else if (value is uint uint32Value)
+        {
+            WriteByte(writer, ValueTypeCodes.UInt32);
+            WriteUInt32(writer, uint32Value);
+        }
+        else if (value is ulong uint64Value)
+        {
+            WriteByte(writer, ValueTypeCodes.UInt64);
+            WriteUInt64(writer, uint64Value);
+        }
+        else if (value is float singleValue)
+        {
+            WriteByte(writer, ValueTypeCodes.Single);
+            WriteSingle(writer, singleValue);
+        }
+        else if (value is double doubleValue)
+        {
+            WriteByte(writer, ValueTypeCodes.Double);
+            WriteDouble(writer, doubleValue);
+        }
+        else if (value is decimal decimalValue)
+        {
+            WriteByte(writer, ValueTypeCodes.Decimal);
+            WriteDecimal(writer, decimalValue);
+        }
+        else if (value is string stringValue)
+        {
+            WriteByte(writer, ValueTypeCodes.String);
+            WriteString(writer, stringValue);
+        }
+        else if (value is AmqpTimestamp timestampValue)
+        {
+            WriteByte(writer, ValueTypeCodes.Timestamp);
+            WriteTimestamp(writer, timestampValue);
+        }
+        else if (value is IReadOnlyList<object> listValue)
+        {
+            WriteByte(writer, ValueTypeCodes.List);
+            WriteList(writer, listValue);
+        }
+        else
+        {
+            throw new MessageException($"Unsupported header value type '{value.GetType()}'");
+        }
     }
 
     private static void WriteBody(PipeWriter writer, ReadOnlyMemory<byte> body)
@@ -598,12 +831,127 @@ public class MessageSerializer : IMessageSerializer
         writer.Advance(1);
     }
 
-    private static int WriteString(string value, Span<byte> buffer)
+    private static void WriteBoolean(PipeWriter writer, bool value)
     {
+        var buffer = writer.GetSpan(1);
+        buffer[0] = value ? (byte)255 : (byte)0;
+        writer.Advance(1);
+    }
+
+    private static void WriteByte(PipeWriter writer, byte value)
+    {
+        var buffer = writer.GetSpan(1);
+        buffer[0] = value;
+        writer.Advance(1);
+    }
+
+    private static void WriteInt16(PipeWriter writer, short value)
+    {
+        var buffer = writer.GetSpan(2);
+        BinaryPrimitives.WriteInt16LittleEndian(buffer, value);
+        writer.Advance(2);
+    }
+
+    private static void WriteInt32(PipeWriter writer, int value)
+    {
+        var buffer = writer.GetSpan(4);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, value);
+        writer.Advance(4);
+    }
+
+    private static void WriteInt64(PipeWriter writer, long value)
+    {
+        var buffer = writer.GetSpan(8);
+        BinaryPrimitives.WriteInt64LittleEndian(buffer, value);
+        writer.Advance(8);
+    }
+
+    private static void WriteUInt16(PipeWriter writer, ushort value)
+    {
+        var buffer = writer.GetSpan(2);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer, value);
+        writer.Advance(2);
+    }
+
+    private static void WriteUInt32(PipeWriter writer, uint value)
+    {
+        var buffer = writer.GetSpan(4);
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer, value);
+        writer.Advance(4);
+    }
+
+    private static void WriteUInt64(PipeWriter writer, ulong value)
+    {
+        var buffer = writer.GetSpan(8);
+        BinaryPrimitives.WriteUInt64LittleEndian(buffer, value);
+        writer.Advance(8);
+    }
+
+    private static void WriteSingle(PipeWriter writer, float value)
+    {
+        var buffer = writer.GetSpan(4);
+        BinaryPrimitives.WriteSingleLittleEndian(buffer, value);
+        writer.Advance(4);
+    }
+
+    private static void WriteDouble(PipeWriter writer, double value)
+    {
+        var buffer = writer.GetSpan(8);
+        BinaryPrimitives.WriteDoubleLittleEndian(buffer, value);
+        writer.Advance(8);
+    }
+
+    private static void WriteDecimal(PipeWriter writer, decimal value)
+    {
+        var buffer = writer.GetSpan(16);
+        Span<int> intBuffer = stackalloc int[4];
+        decimal.GetBits(value, intBuffer);
+
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[0]);
+        buffer = buffer.Slice(4);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[1]);
+        buffer = buffer.Slice(4);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[2]);
+        buffer = buffer.Slice(4);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[3]);
+
+        writer.Advance(16);
+    }
+
+    private static void WriteString(PipeWriter writer, string value)
+    {
+        // 4 bytes per character is very conservative for UTF-8
+        var buffer = writer.GetSpan(4 + (value.Length * 4));
+
         var lengthBuffer = buffer.Slice(0, 4);
         var bytesCount = TextEncoding.GetBytes(value, buffer.Slice(4));
         BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, bytesCount);
-        return bytesCount + 4;
+
+        writer.Advance(bytesCount + 4);
+    }
+
+    private static void WriteByteArray(PipeWriter writer, byte[] value)
+    {
+        var buffer = writer.GetSpan(4 + value.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, value.Length);
+        buffer = buffer.Slice(4);
+        value.CopyTo(buffer);
+        writer.Advance(4 + value.Length);
+    }
+
+    private static void WriteTimestamp(PipeWriter writer, AmqpTimestamp value)
+    {
+        WriteInt64(writer, value.UnixTime);
+    }
+
+    private static void WriteList(PipeWriter writer, IReadOnlyList<object> valueList)
+    {
+        WriteInt32(writer, valueList.Count);
+
+        foreach (var value in valueList)
+        {
+            WriteHeaderValue(writer, value);
+        }
     }
 
     #endregion
@@ -635,6 +983,25 @@ public class MessageSerializer : IMessageSerializer
         public const byte UserId = 14;
     }
 
+    private static class ValueTypeCodes
+    {
+        public const byte Boolean = 1;
+        public const byte Byte = 2;
+        public const byte Int16 = 3;
+        public const byte Int32 = 4;
+        public const byte Int64 = 5;
+        public const byte UInt16 = 6;
+        public const byte UInt32 = 7;
+        public const byte UInt64 = 8;
+        public const byte Single = 9;
+        public const byte Double = 10;
+        public const byte Decimal = 11;
+        public const byte ByteArray = 12;
+        public const byte String = 13;
+        public const byte Timestamp = 14;
+        public const byte List = 15;
+    }
+
     private sealed class MessageParsingState
     {
         private readonly Func<IBasicProperties> propertiesFactory;
@@ -658,7 +1025,7 @@ public class MessageSerializer : IMessageSerializer
             }
         }
 
-        public void AddHeader(string key, byte[] value)
+        public void AddHeader(string key, object value)
         {
             if (Properties!.Headers is null)
             {

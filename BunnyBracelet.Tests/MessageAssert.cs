@@ -1,9 +1,24 @@
 ﻿using RabbitMQ.Client;
 
-namespace BunnyBracelet.SystemTests;
+namespace BunnyBracelet.Tests;
 
 internal static class MessageAssert
 {
+    public static void AreEqual(Message expected, Message actual)
+    {
+        if (expected.Properties is null)
+        {
+            Assert.IsNull(actual.Properties, nameof(expected.Properties) + " should be null.");
+        }
+        else
+        {
+            Assert.IsNotNull(actual.Properties, nameof(expected.Properties) + " should not be null.");
+            ArePropertiesEqual(expected.Properties, actual.Properties);
+        }
+
+        AreBodiesEqual(expected.Body.ToArray(), actual.Body.ToArray());
+    }
+
     public static void AreBodiesEqual(byte[] expected, byte[] actual)
     {
         CollectionAssert.AreEqual(expected, actual, "Body is different.");
