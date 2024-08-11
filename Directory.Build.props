@@ -1,8 +1,9 @@
 ﻿<Project>
 
   <PropertyGroup>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <VersionRevision Condition="'$(VersionRevision)'==''">0</VersionRevision>
+    <AssemblyVersion>1.0.0.$(VersionRevision)</AssemblyVersion>
+    <FileVersion>1.0.0.$(VersionRevision)</FileVersion>
     <Company>Duracellko</Company>
     <Copyright>Copyright © Duracellko 2024</Copyright>
     <NeutralLanguage>en</NeutralLanguage>

@@ -187,8 +187,9 @@ internal sealed class RabbitRunner : IDisposable
     private static DockerClient CreateDockerClient()
     {
         var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
-        var uri = string.IsNullOrEmpty(dockerHost) ? null : new Uri(dockerHost);
-        using var configuration = new DockerClientConfiguration(uri);
+        using var configuration = string.IsNullOrEmpty(dockerHost) ?
+            new DockerClientConfiguration() :
+            new DockerClientConfiguration(new Uri(dockerHost));
         return configuration.CreateClient();
     }
 
