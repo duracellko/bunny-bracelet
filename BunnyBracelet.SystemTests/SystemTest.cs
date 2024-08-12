@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -18,6 +19,8 @@ namespace BunnyBracelet.SystemTests;
 public class SystemTest
 {
     private const string OutputSeparator = "----------";
+
+    private static readonly Lazy<Random> Random = new Lazy<Random>(() => new Random());
 
     [ClassInitialize]
     public static void Initialize(TestContext context)
@@ -81,7 +84,7 @@ public class SystemTest
             properties.Type = "Test message";
             properties.UserId = "bunny";
 
-            var messageContent = Guid.NewGuid().ToByteArray();
+            var messageContent = GetRandomBytes(2224);
             connection1.Publish(bunny1.OutboundExchange.Name!, properties, messageContent);
 
             await AssertMessageInQueue(queue2, (properties, messageContent), 1);
@@ -113,7 +116,7 @@ public class SystemTest
             await AssertUnhealthy(bunny2, bunny3);
 
             var messageId = Guid.NewGuid().ToString();
-            var messageContent = Guid.NewGuid().ToByteArray();
+            var messageContent = GetRandomBytes(5000);
 
             using var connection1 = rabbit1.CreateConnection();
 
@@ -208,7 +211,7 @@ public class SystemTest
             {
                 var properties = connection.CreateProperties();
                 properties.MessageId = prefix + i.ToString("00000", CultureInfo.InvariantCulture);
-                result.Add((properties, Guid.NewGuid().ToByteArray()));
+                result.Add((properties, GetRandomBytes(1551)));
             }
 
             return result;
@@ -316,7 +319,7 @@ public class SystemTest
                 (byte)0,
                 false,
                 innerList,
-                Guid.NewGuid().ToByteArray()
+                GetRandomBytes(120)
             };
 
             headers.Add("test list", list);
@@ -348,7 +351,7 @@ public class SystemTest
             {
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
-                messages.Add((properties, Guid.NewGuid().ToByteArray()));
+                messages.Add((properties, GetRandomBytes(4020)));
             }
 
             using (var connection2 = rabbit2.CreateConnection())
@@ -471,7 +474,7 @@ public class SystemTest
                     var properties = connection1.CreateProperties();
                     properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
                     properties.Persistent = true;
-                    messages.Add((properties, Guid.NewGuid().ToByteArray()));
+                    messages.Add((properties, GetRandomBytes(4000)));
                 }
 
                 using (var connection2 = rabbit2.CreateConnection())
@@ -577,7 +580,7 @@ public class SystemTest
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
                 properties.Expiration = expiration;
-                messages.Add((properties, Guid.NewGuid().ToByteArray()));
+                messages.Add((properties, GetRandomBytes(5000)));
             }
 
             using (var connection2 = rabbit2.CreateConnection())
@@ -661,7 +664,7 @@ public class SystemTest
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
                 properties.Expiration = expiration;
-                messages.Add((properties, Guid.NewGuid().ToByteArray()));
+                messages.Add((properties, GetRandomBytes(842)));
             }
 
             using (var connection2 = rabbit2.CreateConnection())
@@ -727,14 +730,14 @@ public class SystemTest
             await AssertHealthy(bunny);
 
             var messageId = Guid.NewGuid().ToString();
-            var messageContent = Guid.NewGuid().ToByteArray();
+            var messageContent = GetRandomBytes(100);
 
             using var connection1 = rabbit1.CreateConnection();
             var properties1 = connection1.CreateProperties();
             properties1.MessageId = messageId;
             connection1.Publish(exchangeName, properties1, messageContent);
 
-            var expectedOutput = $"Relaying message (MessageId: {messageId}, CorrelationId: (null), Size: 16) from RabbitMQ exchange '{exchangeName}' to '{fakeBunny2.Uri}' failed.";
+            var expectedOutput = $"Relaying message (MessageId: {messageId}, CorrelationId: (null), Size: 100) from RabbitMQ exchange '{exchangeName}' to '{fakeBunny2.Uri}' failed.";
             await WaitForLogOutput(bunny, expectedOutput, TimeSpan.FromMilliseconds(1100));
 
             await AssertHealthy(bunny);
@@ -807,6 +810,44 @@ public class SystemTest
     }
 
     [TestMethod]
+    public async Task ShouldReturn401UnauthorizedOnExpiredTimestamp()
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        await using var bunny = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+
+        await rabbit1.Cleanup();
+        await rabbit1.Start();
+        await bunny.Start();
+
+        try
+        {
+            await AssertHealthy(bunny);
+
+            using var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri(bunny.Uri);
+
+            var message = new byte[] { 82, 77, 81, 82, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0 };
+            WriteExpiredTimestamp(message);
+            using var content = new ByteArrayContent(message);
+            var response = await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
+
+            Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+            await AssertHealthy(bunny);
+        }
+        finally
+        {
+            await PutBunniesDown(bunny);
+        }
+
+        static void WriteExpiredTimestamp(byte[] message)
+        {
+            var span = new Span<byte>(message);
+            var timestamp = DateTime.UtcNow.AddMinutes(-5);
+            BinaryPrimitives.WriteInt64LittleEndian(span.Slice(4, 8), timestamp.ToBinary());
+        }
+    }
+
+    [TestMethod]
     public async Task Initialize3rdEndpointRelayWhen1stFailedAnd2ndHasMissingUri()
     {
         using var rabbit1 = new RabbitRunner(5673);
@@ -837,7 +878,7 @@ public class SystemTest
             await WaitForLogOutput(bunny1, expectedOutput);
 
             var messageId = Guid.NewGuid().ToString();
-            var messageContent = Guid.NewGuid().ToByteArray();
+            var messageContent = GetRandomBytes(2000);
 
             using var connection2 = rabbit2.CreateConnection();
             connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
@@ -920,7 +961,7 @@ public class SystemTest
         try
         {
             var messageId = Guid.NewGuid().ToString();
-            var messageContent = Guid.NewGuid().ToByteArray();
+            var messageContent = GetRandomBytes(5000);
 
             using var connection1 = rabbit1.CreateConnection();
 
@@ -1007,7 +1048,7 @@ public class SystemTest
 
             var properties = connection1.CreateProperties();
             properties.MessageId = Guid.NewGuid().ToString();
-            var body = Guid.NewGuid().ToByteArray();
+            var body = GetRandomBytes(4000);
             connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
 
             await Task.Delay(200);
@@ -1143,8 +1184,7 @@ public class SystemTest
     private static byte[] GetRandomBytes(int length)
     {
         var result = new byte[length];
-        var random = new Random();
-        random.NextBytes(result);
+        Random.Value.NextBytes(result);
         return result;
     }
 }

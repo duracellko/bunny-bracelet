@@ -15,6 +15,7 @@ public class RelayHostedService : IHostedService
     private readonly RabbitService rabbitService;
     private readonly IHttpClientFactory httpClientFactory;
     private readonly IMessageSerializer messageSerializer;
+    private readonly TimeProvider timeProvider;
     private readonly IOptions<RelayOptions> options;
     private readonly IOptions<RabbitOptions> rabbitOptions;
     private readonly ILogger<RelayHostedService> logger;
@@ -24,6 +25,7 @@ public class RelayHostedService : IHostedService
         RabbitService rabbitService,
         IHttpClientFactory httpClientFactory,
         IMessageSerializer messageSerializer,
+        TimeProvider timeProvider,
         IOptions<RelayOptions> options,
         IOptions<RabbitOptions> rabbitOptions,
         ILogger<RelayHostedService> logger)
@@ -31,6 +33,7 @@ public class RelayHostedService : IHostedService
         ArgumentNullException.ThrowIfNull(rabbitService);
         ArgumentNullException.ThrowIfNull(httpClientFactory);
         ArgumentNullException.ThrowIfNull(messageSerializer);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(rabbitOptions);
         ArgumentNullException.ThrowIfNull(logger);
@@ -38,6 +41,7 @@ public class RelayHostedService : IHostedService
         this.rabbitService = rabbitService;
         this.httpClientFactory = httpClientFactory;
         this.messageSerializer = messageSerializer;
+        this.timeProvider = timeProvider;
         this.options = options;
         this.rabbitOptions = rabbitOptions;
         this.logger = logger;
@@ -118,6 +122,9 @@ public class RelayHostedService : IHostedService
             using var httpClient = httpClientFactory.CreateClient();
             httpClient.BaseAddress = endpoint;
             httpClient.Timeout = TimeSpan.FromMilliseconds(options.Value.Timeout);
+
+            // Update message timestamp used for authentication.
+            message = new Message(message.Body, message.Properties, timeProvider.GetUtcNow().UtcDateTime);
 
             using var content = new StreamContent(await messageSerializer.ConvertMessageToStream(message));
             var response = await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);

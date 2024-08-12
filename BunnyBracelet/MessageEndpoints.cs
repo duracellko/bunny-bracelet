@@ -34,13 +34,14 @@ internal static class MessageEndpoints
     {
         var rabbitService = context.RequestServices.GetRequiredService<RabbitService>();
         var messageSerializer = context.RequestServices.GetRequiredService<IMessageSerializer>();
-        var options = context.RequestServices.GetRequiredService<IOptions<RabbitOptions>>();
+        var options = context.RequestServices.GetRequiredService<IOptions<RelayOptions>>();
+        var rabbitOptions = context.RequestServices.GetRequiredService<IOptions<RabbitOptions>>();
         var logger = GetLogger(context);
 
         var message = default(Message);
         logger.ReceivingInboundMessage(context.Request.ContentLength, context.TraceIdentifier);
 
-        if (string.IsNullOrEmpty(options.Value.InboundExchange?.Name))
+        if (string.IsNullOrEmpty(rabbitOptions.Value.InboundExchange?.Name))
         {
             logger.MissingInboundExchange();
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -50,10 +51,14 @@ internal static class MessageEndpoints
         try
         {
             message = await messageSerializer.ReadMessage(context.Request.Body, rabbitService.CreateBasicProperties);
-            rabbitService.SendMessage(message);
 
-            logger.InboundMessageForwarded(message.Properties, message.Body.Length, context.TraceIdentifier);
-            context.Response.StatusCode = StatusCodes.Status204NoContent;
+            if (CheckMessageTimestamp(message, context, options, logger))
+            {
+                rabbitService.SendMessage(message);
+
+                logger.InboundMessageForwarded(message.Properties, message.Body.Length, context.TraceIdentifier);
+                context.Response.StatusCode = StatusCodes.Status204NoContent;
+            }
         }
         catch (MessageException ex)
         {
@@ -66,6 +71,28 @@ internal static class MessageEndpoints
             logger.ErrorProcessingInboundMessage(ex, message.Properties, message.Body.Length, context.TraceIdentifier);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Rejects too old messages to mitigate replay attack.
+    /// </summary>
+    private static bool CheckMessageTimestamp(
+        Message message,
+        HttpContext context,
+        IOptions<RelayOptions> options,
+        ILogger logger)
+    {
+        var timeProvider = context.RequestServices.GetRequiredService<TimeProvider>();
+
+        var timeout = TimeSpan.FromMilliseconds(options.Value.Timeout);
+        if (message.Timestamp < timeProvider.GetUtcNow().UtcDateTime.Subtract(timeout))
+        {
+            logger.ErrorMessageTimestampAuthentication(message.Timestamp);
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return false;
+        }
+
+        return true;
     }
 
     private static ILogger GetLogger(HttpContext context)

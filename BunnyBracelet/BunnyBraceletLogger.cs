@@ -29,6 +29,11 @@ internal static class BunnyBraceletLogger
         new EventId(5, nameof(MissingInboundExchange)),
         "Inbound exchange is not configured. Receiving of messages is disabled. Configure setting 'BunnyBracelet.InboundExchange'.");
 
+    private static readonly Action<ILogger, DateTime, Exception?> LogErrorMessageTimestampAuthentication = LoggerMessage.Define<DateTime>(
+        LogLevel.Error,
+        new EventId(6, nameof(ErrorMessageTimestampAuthentication)),
+        "Message authentication failed. Timestamp '{Timestamp}' is expired.");
+
     private static readonly Action<ILogger, string?, string?, int, string, Uri, Exception?> LogRelayingMessage = LoggerMessage.Define<string?, string?, int, string, Uri>(
         LogLevel.Debug,
         new EventId(100, nameof(RelayingMessage)),
@@ -192,6 +197,11 @@ internal static class BunnyBraceletLogger
     public static void MissingInboundExchange(this ILogger logger)
     {
         LogMissingInboundExchange(logger, null);
+    }
+
+    public static void ErrorMessageTimestampAuthentication(this ILogger logger, DateTime timestamp)
+    {
+        LogErrorMessageTimestampAuthentication(logger, timestamp, null);
     }
 
     public static void RelayingMessage(this ILogger logger, Uri uri, string exchange, IBasicProperties? properties, int size)

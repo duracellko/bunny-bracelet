@@ -13,8 +13,8 @@ namespace BunnyBracelet;
 /// </summary>
 /// <remarks>
 /// Serialized message is a binary format that always starts with RMQR encoded in ASCII and
-/// ends with byte 0. It contains sequence of sections and each section stores
-/// specific part of the message, e.g. basic property or body content.
+/// ends with byte 0. It contains timestamp followed by sequence of sections and each section
+/// stores specific part of the message, e.g. basic property or body content.
 /// First byte of each section identifies type of section and and what part of the message
 /// is stored in the section.
 ///
@@ -90,6 +90,8 @@ public class MessageSerializer : IMessageSerializer
             reader.AdvanceTo(buffer.Start);
 
             var state = new MessageParsingState(propertiesFactory);
+            await ReadTimestamp(reader, state);
+
             while (!state.IsCompleted)
             {
                 var code = await ReadByte(reader);
@@ -116,7 +118,7 @@ public class MessageSerializer : IMessageSerializer
                 }
             }
 
-            return new Message(state.Body, state.Properties);
+            return new Message(state.Body, state.Properties, state.Timestamp);
         }
         catch (ArgumentOutOfRangeException ex)
         {
@@ -148,6 +150,17 @@ public class MessageSerializer : IMessageSerializer
         }
 
         return buffer.Slice(4);
+    }
+
+    private static async ValueTask ReadTimestamp(PipeReader reader, MessageParsingState state)
+    {
+        var timestampBinary = await ReadInt64(reader);
+        if (timestampBinary < 0)
+        {
+            throw new MessageException("Timestamp should be in UTC, but local time zone bit was detected.");
+        }
+
+        state.Timestamp = DateTime.FromBinary(timestampBinary);
     }
 
     private static async ValueTask ReadProperty(PipeReader reader, MessageParsingState state)
@@ -508,6 +521,7 @@ public class MessageSerializer : IMessageSerializer
         try
         {
             WritePreamble(writer);
+            WriteTimestamp(writer, message.Timestamp);
 
             if (message.Properties is not null)
             {
@@ -530,6 +544,11 @@ public class MessageSerializer : IMessageSerializer
         var buffer = writer.GetSpan(Preamble.Length);
         Preamble.CopyTo(buffer);
         writer.Advance(Preamble.Length);
+    }
+
+    private static void WriteTimestamp(PipeWriter writer, DateTime timestamp)
+    {
+        WriteInt64(writer, timestamp.ToBinary());
     }
 
     private static async ValueTask WriteProperties(IBasicProperties properties, PipeWriter writer)
@@ -1016,6 +1035,8 @@ public class MessageSerializer : IMessageSerializer
         public IBasicProperties? Properties { get; private set; }
 
         public ReadOnlyMemory<byte> Body { get; set; }
+
+        public DateTime Timestamp { get; set; }
 
         public void CreateProperties()
         {
