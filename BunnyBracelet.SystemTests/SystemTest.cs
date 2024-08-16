@@ -1,13 +1,15 @@
-﻿using System.Buffers.Binary;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using RabbitMQ.Client;
 
+using ByteArray = byte[];
 #pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
 using RabbitMessage = (RabbitMQ.Client.IBasicProperties? properties, byte[] body);
 #pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
@@ -37,12 +39,15 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task SendMessageFromOneRabbitMQInstanceToAnother()
+    [DataRow(0)]
+    [DataRow(1)]
+    public async Task SendMessageFromOneRabbitMQInstanceToAnother(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, outboundExchange: string.Empty, endpointPort: 5001);
+        SetupAuthentication(keyIndex, bunny1, bunny2);
 
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
@@ -97,7 +102,9 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task RelayMessageTo2RabbitMQInstances()
+    [DataRow(0)]
+    [DataRow(2)]
+    public async Task RelayMessageTo2RabbitMQInstances(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
@@ -105,6 +112,7 @@ public class SystemTest
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPorts: new[] { 5002, 5003 });
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
+        SetupAuthentication(keyIndex, 32, bunny1, bunny2, bunny3);
 
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
@@ -143,7 +151,9 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task RelayMessagesFrom2RabbitMQInstances()
+    [DataRow(0)]
+    [DataRow(1)]
+    public async Task RelayMessagesFrom2RabbitMQInstances(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
@@ -151,6 +161,7 @@ public class SystemTest
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5003);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5003);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
+        SetupAuthentication(keyIndex, 128, bunny1, bunny2, bunny3);
 
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
@@ -238,12 +249,15 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task SendMessageWithAllHeaderValueTypes()
+    [DataRow(0)]
+    [DataRow(2)]
+    public async Task SendMessageWithAllHeaderValueTypes(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, outboundExchange: string.Empty, endpointPort: 5001);
+        SetupAuthentication(keyIndex, 100, bunny1, bunny2);
 
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
@@ -329,12 +343,15 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task NetworkDisconnectedOnSecondMessage()
+    [DataRow(0)]
+    [DataRow(1)]
+    public async Task NetworkDisconnectedOnSecondMessage(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
+        SetupAuthentication(keyIndex, bunny1, bunny2);
         var queueName = "bunny-test-" + Guid.NewGuid().ToString();
 
         await rabbit1.Cleanup();
@@ -442,7 +459,9 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task RestartRabbitMQInstancesWithDurableQueues()
+    [DataRow(0)]
+    [DataRow(2)]
+    public async Task RestartRabbitMQInstancesWithDurableQueues(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
@@ -456,6 +475,8 @@ public class SystemTest
         var outboundExchange2 = CreateExchangeSettings("durable-outbound");
         var endpoint2 = CreateEndpointSettings(5001);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, inboundExchange2, outboundExchange2, endpoints: new[] { endpoint2 });
+
+        SetupAuthentication(keyIndex, 79, bunny1, bunny2);
 
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start());
@@ -636,7 +657,9 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task MessageExpirationIsCopiedToDestination()
+    [DataRow(0)]
+    [DataRow(1)]
+    public async Task MessageExpirationIsCopiedToDestination(int keyIndex)
     {
         const string expiration = "4200";
         using var rabbit1 = new RabbitRunner(5673);
@@ -645,6 +668,7 @@ public class SystemTest
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange: string.Empty, endpointPort: 5002);
         bunny1.RequeueDelay = 1000;
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, outboundExchange: string.Empty, endpointPort: default);
+        SetupAuthentication(keyIndex, bunny1, bunny2);
         var queueName = "bunny-test-" + Guid.NewGuid().ToString();
 
         await rabbit1.Cleanup();
@@ -765,7 +789,7 @@ public class SystemTest
             using var httpClient = new HttpClient();
             httpClient.BaseAddress = new Uri(bunny.Uri);
 
-            var message = new byte[] { 82, 77, 81, 82, 0 };
+            var message = GetAuthenticatedMessage();
             using var content = new ByteArrayContent(message);
             var response = await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
 
@@ -796,7 +820,8 @@ public class SystemTest
             using var httpClient = new HttpClient();
             httpClient.BaseAddress = new Uri(bunny.Uri);
 
-            var message = new byte[] { 82, 77, 81, 82 };
+            var message = GetAuthenticatedMessage();
+            message[12] = 12;
             using var content = new ByteArrayContent(message);
             var response = await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
 
@@ -810,10 +835,19 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task ShouldReturn401UnauthorizedOnExpiredTimestamp()
+    [DataRow("")]
+    [DataRow("1")]
+    public async Task ShouldReturn401UnauthorizedOnExpiredTimestamp(string useKeyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         await using var bunny = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+
+        ByteArray? key = null;
+        if (!string.IsNullOrEmpty(useKeyIndex))
+        {
+            key = RandomNumberGenerator.GetBytes(64);
+            bunny.AuthenticationKey1 = Convert.ToBase64String(key);
+        }
 
         await rabbit1.Cleanup();
         await rabbit1.Start();
@@ -826,29 +860,128 @@ public class SystemTest
             using var httpClient = new HttpClient();
             httpClient.BaseAddress = new Uri(bunny.Uri);
 
-            var message = new byte[] { 82, 77, 81, 82, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0 };
-            WriteExpiredTimestamp(message);
+            var message = GetAuthenticatedMessage(key: key, timestampDifference: TimeSpan.FromMinutes(-5));
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("message", UriKind.Relative));
             using var content = new ByteArrayContent(message);
-            var response = await httpClient.PostAsync(new Uri("message", UriKind.Relative), content);
+            request.Content = content;
+
+            if (!string.IsNullOrEmpty(useKeyIndex))
+            {
+                request.Headers.Add("BunnyBracelet-AuthenticationKeyIndex", useKeyIndex);
+            }
+
+            var response = await httpClient.SendAsync(request);
 
             Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+            await WaitForLogOutput(bunny, "Message authentication failed. Timestamp ");
+            Assert.IsTrue(Regex.IsMatch(bunny.GetOutput(), @"Message authentication failed\. Timestamp '[^\']+' is expired\."));
             await AssertHealthy(bunny);
         }
         finally
         {
             await PutBunniesDown(bunny);
         }
+    }
 
-        static void WriteExpiredTimestamp(byte[] message)
+    [TestMethod]
+    [DataRow("")]
+    [DataRow("1")]
+    public async Task ShouldReturn401UnauthorizedOnInvalidKeyIndexHeader(string useKeyIndex)
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        await using var bunny = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+
+        var key = RandomNumberGenerator.GetBytes(64);
+        bunny.UseAuthenticationKeyIndex = 2;
+        bunny.AuthenticationKey2 = Convert.ToBase64String(key);
+
+        await rabbit1.Cleanup();
+        await rabbit1.Start();
+        await bunny.Start();
+
+        try
         {
-            var span = new Span<byte>(message);
-            var timestamp = DateTime.UtcNow.AddMinutes(-5);
-            BinaryPrimitives.WriteInt64LittleEndian(span.Slice(4, 8), timestamp.ToBinary());
+            await AssertHealthy(bunny);
+
+            using var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri(bunny.Uri);
+
+            var message = GetAuthenticatedMessage(key);
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("message", UriKind.Relative));
+            using var content = new ByteArrayContent(message);
+            request.Content = content;
+
+            if (!string.IsNullOrEmpty(useKeyIndex))
+            {
+                request.Headers.Add("BunnyBracelet-AuthenticationKeyIndex", useKeyIndex);
+            }
+
+            var response = await httpClient.SendAsync(request);
+
+            Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+            var expectedLog = string.IsNullOrEmpty(useKeyIndex) ?
+                "Missing authentication key index in HTTP header 'BunnyBracelet-AuthenticationKeyIndex'." :
+                "Missing authentication key 1.";
+            await WaitForLogOutput(bunny, expectedLog);
+            await AssertHealthy(bunny);
+        }
+        finally
+        {
+            await PutBunniesDown(bunny);
         }
     }
 
     [TestMethod]
-    public async Task Initialize3rdEndpointRelayWhen1stFailedAnd2ndHasMissingUri()
+    [DataRow(true)]
+    [DataRow(false)]
+    public async Task ShouldReturn401UnauthorizedOnIncorrectAuthenticationCode(bool invalidMessage)
+    {
+        using var rabbit1 = new RabbitRunner(5673);
+        await using var bunny = BunnyRunner.Create(5001, rabbit1.Uri, endpointPort: 5002);
+
+        var key = RandomNumberGenerator.GetBytes(64);
+        bunny.UseAuthenticationKeyIndex = 1;
+        bunny.AuthenticationKey1 = Convert.ToBase64String(key);
+
+        await rabbit1.Cleanup();
+        await rabbit1.Start();
+        await bunny.Start();
+
+        try
+        {
+            await AssertHealthy(bunny);
+
+            using var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri(bunny.Uri);
+
+            var message = GetAuthenticatedMessage(key);
+            message[message.Length - 1] ^= 1;
+            if (invalidMessage)
+            {
+                message[12] = 12;
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("message", UriKind.Relative));
+            using var content = new ByteArrayContent(message);
+            request.Headers.Add("BunnyBracelet-AuthenticationKeyIndex", "1");
+            request.Content = content;
+
+            var response = await httpClient.SendAsync(request);
+
+            Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+            await WaitForLogOutput(bunny, "Message authentication using key 1 failed.");
+            await AssertHealthy(bunny);
+        }
+        finally
+        {
+            await PutBunniesDown(bunny);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(2)]
+    public async Task Initialize3rdEndpointRelayWhen1stFailedAnd2ndHasMissingUri(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
@@ -860,6 +993,7 @@ public class SystemTest
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint1, endpoint2, endpoint3 });
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
+        SetupAuthentication(keyIndex, bunny1, bunny2, bunny3);
 
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
@@ -941,7 +1075,9 @@ public class SystemTest
     }
 
     [TestMethod]
-    public async Task TwoEndpointsOnTheSameQueueRelayMessageOnlyToOne()
+    [DataRow(0)]
+    [DataRow(1)]
+    public async Task TwoEndpointsOnTheSameQueueRelayMessageOnlyToOne(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
@@ -953,6 +1089,7 @@ public class SystemTest
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint1, endpoint2 });
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
+        SetupAuthentication(keyIndex, 800, bunny1, bunny2, bunny3);
 
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
@@ -1085,6 +1222,54 @@ public class SystemTest
         {
             Assert.AreEqual(0, bunnies[i].ExitCode, $"Exit code - Bunny {i + 1}");
         }
+    }
+
+    private static void SetupAuthentication(int useKeyIndex, params BunnyRunner[] bunnies)
+    {
+        SetupAuthentication(useKeyIndex, 64, bunnies);
+    }
+
+    private static void SetupAuthentication(int useKeyIndex, int keySize, params BunnyRunner[] bunnies)
+    {
+        if (useKeyIndex > 0)
+        {
+            var key = RandomNumberGenerator.GetBytes(keySize);
+
+            foreach (var bunny in bunnies)
+            {
+                bunny.UseAuthenticationKeyIndex = useKeyIndex;
+                if (useKeyIndex == 2)
+                {
+                    bunny.AuthenticationKey2 = Convert.ToBase64String(key);
+                    bunny.AuthenticationKey1 = Convert.ToBase64String(RandomNumberGenerator.GetBytes(keySize));
+                }
+                else
+                {
+                    bunny.AuthenticationKey1 = Convert.ToBase64String(key);
+                    bunny.AuthenticationKey2 = Convert.ToBase64String(RandomNumberGenerator.GetBytes(keySize));
+                }
+            }
+        }
+    }
+
+    private static byte[] GetAuthenticatedMessage(ByteArray? key = null, TimeSpan? timestampDifference = default)
+    {
+        var message = new byte[] { 82, 77, 81, 82, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0 };
+
+        var timestamp = DateTime.UtcNow;
+        if (timestampDifference.HasValue)
+        {
+            timestamp = timestamp.Add(timestampDifference.Value);
+        }
+
+        if (key is not null)
+        {
+            using var hmac = new HMACSHA256(key);
+            var hash = hmac.ComputeHash(message);
+            message = message.Concat(hash).ToArray();
+        }
+
+        return message;
     }
 
     private static async Task<RabbitMessage> WaitForMessage(

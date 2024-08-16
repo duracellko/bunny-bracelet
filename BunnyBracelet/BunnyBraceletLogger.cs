@@ -34,6 +34,31 @@ internal static class BunnyBraceletLogger
         new EventId(6, nameof(ErrorMessageTimestampAuthentication)),
         "Message authentication failed. Timestamp '{Timestamp}' is expired.");
 
+    private static readonly Action<ILogger, int, Exception?> LogMessageAuthenticated = LoggerMessage.Define<int>(
+        LogLevel.Debug,
+        new EventId(7, nameof(MessageAuthenticated)),
+        "Message successfully authenticated using key {KeyIndex}.");
+
+    private static readonly Action<ILogger, int, Exception?> LogErrorMessageAuthentication = LoggerMessage.Define<int>(
+        LogLevel.Error,
+        new EventId(8, nameof(ErrorMessageAuthentication)),
+        "Message authentication using key {KeyIndex} failed.");
+
+    private static readonly Action<ILogger, int, Exception?> LogErrorMissingAuthenticationKey = LoggerMessage.Define<int>(
+        LogLevel.Error,
+        new EventId(9, nameof(ErrorMissingAuthenticationKey)),
+        "Missing authentication key {KeyIndex}.");
+
+    private static readonly Action<ILogger, Exception?> LogErrorMissingAuthenticationKeyIndex = LoggerMessage.Define(
+        LogLevel.Error,
+        new EventId(10, nameof(ErrorMissingAuthenticationKeyIndex)),
+        "Missing authentication key index in HTTP header '" + MessageEndpoints.KeyIndexHeaderName + "'.");
+
+    private static readonly Action<ILogger, int, Exception?> LogMessageAuthenticationCodeGenerated = LoggerMessage.Define<int>(
+        LogLevel.Debug,
+        new EventId(11, nameof(MessageAuthenticationCodeGenerated)),
+        "Generated message authentication code using key {KeyIndex}.");
+
     private static readonly Action<ILogger, string?, string?, int, string, Uri, Exception?> LogRelayingMessage = LoggerMessage.Define<string?, string?, int, string, Uri>(
         LogLevel.Debug,
         new EventId(100, nameof(RelayingMessage)),
@@ -202,6 +227,31 @@ internal static class BunnyBraceletLogger
     public static void ErrorMessageTimestampAuthentication(this ILogger logger, DateTime timestamp)
     {
         LogErrorMessageTimestampAuthentication(logger, timestamp, null);
+    }
+
+    public static void MessageAuthenticated(this ILogger logger, int keyIndex)
+    {
+        LogMessageAuthenticated(logger, keyIndex, null);
+    }
+
+    public static void ErrorMessageAuthentication(this ILogger logger, int keyIndex)
+    {
+        LogErrorMessageAuthentication(logger, keyIndex, null);
+    }
+
+    public static void ErrorMissingAuthenticationKey(this ILogger logger, int keyIndex)
+    {
+        LogErrorMissingAuthenticationKey(logger, keyIndex, null);
+    }
+
+    public static void ErrorMissingAuthenticationKeyIndex(this ILogger logger)
+    {
+        LogErrorMissingAuthenticationKeyIndex(logger, null);
+    }
+
+    public static void MessageAuthenticationCodeGenerated(this ILogger logger, int keyIndex)
+    {
+        LogMessageAuthenticationCodeGenerated(logger, keyIndex, null);
     }
 
     public static void RelayingMessage(this ILogger logger, Uri uri, string exchange, IBasicProperties? properties, int size)
