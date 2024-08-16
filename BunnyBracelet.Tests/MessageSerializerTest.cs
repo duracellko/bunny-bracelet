@@ -8,6 +8,12 @@ namespace BunnyBracelet.Tests;
 [TestClass]
 public class MessageSerializerTest
 {
+    private static readonly DateTime TestTimestamp = new DateTime(2024, 8, 11, 23, 2, 32, 922, 129, DateTimeKind.Utc);
+    private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime Y2K38 = new DateTime(2038, 1, 19, 3, 14, 7, DateTimeKind.Unspecified);
+
+    private static readonly Lazy<Random> Random = new Lazy<Random>(() => new Random());
+
     [TestMethod]
     public async Task WriteAndRead_EmptyMessage()
     {
@@ -18,7 +24,7 @@ public class MessageSerializerTest
     [TestMethod]
     public async Task WriteAndRead_DefaultProperties()
     {
-        var message = new Message(Array.Empty<byte>(), new BasicPropertiesMock());
+        var message = new Message(Array.Empty<byte>(), new BasicPropertiesMock(), UnixEpoch);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -52,7 +58,7 @@ public class MessageSerializerTest
             UserId = "duracellko"
         };
 
-        var message = new Message(Guid.NewGuid().ToByteArray(), properties);
+        var message = new Message(GetRandomBytes(933), properties, TestTimestamp);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -71,7 +77,7 @@ public class MessageSerializerTest
             Headers = headers
         };
 
-        var message = new Message(Guid.NewGuid().ToByteArray(), properties);
+        var message = new Message(GetRandomBytes(100), properties, DateTime.UtcNow);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -80,7 +86,7 @@ public class MessageSerializerTest
     {
         var body = GetRandomBytes(12345678);
 
-        var message = new Message(body, null);
+        var message = new Message(body, null, Y2K38);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -100,7 +106,7 @@ public class MessageSerializerTest
             Priority = 3
         };
 
-        var message = new Message(null, properties);
+        var message = new Message(null, properties, UnixEpoch);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -120,7 +126,7 @@ public class MessageSerializerTest
             Headers = headers,
         };
 
-        var message = new Message(null, properties);
+        var message = new Message(null, properties, TestTimestamp);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -132,7 +138,7 @@ public class MessageSerializerTest
             ReplyToAddress = new PublicationAddress(null, string.Empty, null),
         };
 
-        var message = new Message(new byte[1000], properties);
+        var message = new Message(new byte[1000], properties, DateTime.UtcNow);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -147,7 +153,7 @@ public class MessageSerializerTest
             ReplyToAddress = new PublicationAddress("\uD83D\uDC8E", "\u2702 > \uD83D\uDCDC", "  🦎 "),
         };
 
-        var message = new Message(new byte[1000], properties);
+        var message = new Message(new byte[1000], properties, DateTime.UtcNow);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -203,7 +209,7 @@ public class MessageSerializerTest
             false,
             innerList,
             "Outer list",
-            Guid.NewGuid().ToByteArray()
+            GetRandomBytes(80)
         };
 
         headers.Add("test list", list);
@@ -213,7 +219,7 @@ public class MessageSerializerTest
             Headers = headers
         };
 
-        var message = new Message(Guid.NewGuid().ToByteArray(), properties);
+        var message = new Message(GetRandomBytes(120), properties, TestTimestamp);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -223,10 +229,10 @@ public class MessageSerializerTest
         var message = CreateSampleMessage();
         var serializedMessage = await SerializeMessage(message);
 
-        var messageBytes = new byte[serializedMessage.Length + 16];
+        var messageBytes = new byte[serializedMessage.Length + 20];
         serializedMessage.CopyTo(messageBytes, 0);
-        var tailBytes = Guid.NewGuid().ToByteArray();
-        tailBytes.CopyTo(messageBytes.AsMemory().Slice(messageBytes.Length - 16));
+        var tailBytes = GetRandomBytes(20);
+        tailBytes.CopyTo(messageBytes.AsMemory().Slice(messageBytes.Length - 20));
 
         var deserializedMessage = await DeserializeMessage(serializedMessage);
         MessageAssert.AreEqual(message, deserializedMessage);
@@ -292,10 +298,10 @@ public class MessageSerializerTest
         var message = CreateSampleMessage();
         var messageBytes = await SerializeMessage(message);
 
-        // 4 bytes = preamble, 1 byte - start properties
+        // 4 bytes = preamble, 8 bytes - timestamp, 1 byte - start properties
         // 1 bytes = property, 1 byte - MessageId property
         var newMessageIdSize = message.Body.Length * 2;
-        BinaryPrimitives.WriteInt32LittleEndian(messageBytes.AsSpan().Slice(7), newMessageIdSize);
+        BinaryPrimitives.WriteInt32LittleEndian(messageBytes.AsSpan().Slice(15), newMessageIdSize);
 
         await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
@@ -306,9 +312,9 @@ public class MessageSerializerTest
         var message = CreateSampleMessage();
         var messageBytes = await SerializeMessage(message);
 
-        // 4 bytes = preamble, 1 byte - start properties,
+        // 4 bytes = preamble, 8 bytes - timestamp, 1 byte - start properties,
         // 1 bytes = property, 1 byte - MessageId property, 4 bytes - string length
-        messageBytes[14] = 0;
+        messageBytes[22] = 0;
 
         await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
@@ -319,9 +325,9 @@ public class MessageSerializerTest
         var message = CreateSampleMessage();
         var messageBytes = await SerializeMessage(message);
 
-        // 4 bytes = preamble, 1 byte - start properties,
+        // 4 bytes = preamble, 8 bytes - timestamp, 1 byte - start properties,
         // 1 bytes = property, 1 byte - MessageId property, 4 bytes - string length
-        messageBytes[11] = 0;
+        messageBytes[19] = 0;
 
         await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
@@ -332,9 +338,9 @@ public class MessageSerializerTest
         var message = CreateSampleMessage();
         var messageBytes = await SerializeMessage(message);
 
-        // 4 bytes = preamble, 1 byte - start properties,
+        // 4 bytes = preamble, 8 bytes - timestamp, 1 byte - start properties,
         // 1 bytes = property, 1 byte - MessageId property, 4 bytes - string length
-        messageBytes[11 + message.Properties!.MessageId.Length - 1] = 226;
+        messageBytes[19 + message.Properties!.MessageId.Length - 1] = 226;
 
         var deserializedMessage = await DeserializeMessage(messageBytes);
 
@@ -370,24 +376,24 @@ public class MessageSerializerTest
             Type = "Test message",
             UserId = "duracellko"
         };
-        var message1 = new Message(Guid.NewGuid().ToByteArray(), properties);
+        var message1 = new Message(GetRandomBytes(1342), properties, TestTimestamp);
         var message1Bytes = await SerializeMessage(message1);
 
         var message2 = CreateSampleMessage();
         var message2Bytes = await SerializeMessage(message2);
 
         // Combine bytes of message 1 and 2, but do not repeat
-        // preamble (4-bytes) and message end (1 byte).
-        var messageBytes = new byte[message1Bytes.Length + message2Bytes.Length - 5];
+        // preamble (4-bytes), timestamp and message end (1 byte).
+        var messageBytes = new byte[message1Bytes.Length + message2Bytes.Length - 13];
         message1Bytes.CopyTo(messageBytes, 0);
 
         // Overwrite last byte (end of message) of message 1.
-        message2Bytes.AsMemory().Slice(4)
+        message2Bytes.AsMemory().Slice(12)
             .CopyTo(messageBytes.AsMemory().Slice(message1Bytes.Length - 1));
 
         var deserializedMessage = await DeserializeMessage(messageBytes);
 
-        var expectedMessage = new Message(message2.Body, message1.Properties);
+        var expectedMessage = new Message(message2.Body, message1.Properties, TestTimestamp);
         expectedMessage.Properties!.MessageId = message2.Properties!.MessageId;
         expectedMessage.Properties.Timestamp = message2.Properties.Timestamp;
         expectedMessage.Properties.Type = message2.Properties.Type;
@@ -409,7 +415,7 @@ public class MessageSerializerTest
             """;
         var body = Encoding.Unicode.GetBytes(text);
 
-        var message = new Message(body, properties);
+        var message = new Message(body, properties, TestTimestamp);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -452,15 +458,14 @@ public class MessageSerializerTest
             body[i] = (byte)(((i + 1) * (i + 52)) % 256);
         }
 
-        return new Message(body, properties);
+        return new Message(body, properties, DateTime.UtcNow);
     }
 
     [SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "Random is sufficient for test data.")]
     private static byte[] GetRandomBytes(int length)
     {
         var result = new byte[length];
-        var random = new Random();
-        random.NextBytes(result);
+        Random.Value.NextBytes(result);
         return result;
     }
 }

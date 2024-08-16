@@ -17,6 +17,9 @@ internal static class MessageAssert
         }
 
         AreBodiesEqual(expected.Body.ToArray(), actual.Body.ToArray());
+
+        Assert.AreEqual(expected.Timestamp, actual.Timestamp);
+        Assert.AreEqual(expected.Timestamp.Kind, actual.Timestamp.Kind);
     }
 
     public static void AreBodiesEqual(byte[] expected, byte[] actual)

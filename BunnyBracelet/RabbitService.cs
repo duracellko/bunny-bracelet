@@ -325,7 +325,7 @@ public sealed class RabbitService : IDisposable
             {
                 logger.ConsumingMessage(exchangeName, queueName!, consumerTag!, e.BasicProperties, e.Body.Length);
 
-                var message = new Message(e.Body, e.BasicProperties);
+                var message = new Message(e.Body, e.BasicProperties, default);
                 var result = await process(message);
 
                 switch (result)

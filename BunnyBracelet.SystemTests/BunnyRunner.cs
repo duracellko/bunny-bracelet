@@ -57,6 +57,12 @@ internal sealed class BunnyRunner : IAsyncDisposable
 
     public IReadOnlyList<EndpointSettings> Endpoints { get; }
 
+    public int UseAuthenticationKeyIndex { get; set; }
+
+    public string? AuthenticationKey1 { get; set; }
+
+    public string? AuthenticationKey2 { get; set; }
+
     public int? Timeout { get; set; }
 
     public int? RequeueDelay { get; set; }
@@ -343,6 +349,21 @@ internal sealed class BunnyRunner : IAsyncDisposable
         for (int i = 0; i < Endpoints.Count; i++)
         {
             SetEndpointEnvironment(result.Environment, Endpoints[i], i);
+        }
+
+        if (UseAuthenticationKeyIndex != 0)
+        {
+            result.Environment["BunnyBracelet__Authentication__UseKeyIndex"] = UseAuthenticationKeyIndex.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (AuthenticationKey1 is not null)
+        {
+            result.Environment["BunnyBracelet__Authentication__Key1"] = AuthenticationKey1;
+        }
+
+        if (AuthenticationKey2 is not null)
+        {
+            result.Environment["BunnyBracelet__Authentication__Key2"] = AuthenticationKey2;
         }
 
         if (Timeout.HasValue)

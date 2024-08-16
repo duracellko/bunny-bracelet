@@ -12,6 +12,11 @@ public class RelayOptions
     public IList<RelayEndpointOptions> Endpoints { get; } = new List<RelayEndpointOptions>();
 
     /// <summary>
+    /// Gets or sets configuration of message authentication.
+    /// </summary>
+    public RelayAuthenticationOptions? Authentication { get; set; }
+
+    /// <summary>
     /// Gets or sets the timeout in milliseconds for sending a message to an HTTP endpoint.
     /// </summary>
     /// <remarks>

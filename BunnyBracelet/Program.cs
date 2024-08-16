@@ -17,6 +17,7 @@ public static partial class Program
         var applicationConfigurationSection = builder.Configuration.GetSection(ApplicationName);
 
         builder.Services.AddHttpClient();
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.Configure<RabbitOptions>(applicationConfigurationSection);
         builder.Services.Configure<RelayOptions>(applicationConfigurationSection);
         builder.Services.AddSingleton<RabbitService>();
