@@ -44,6 +44,9 @@ jobs:
     - name: Test (system tests)
       run: dotnet test ./BunnyBracelet.SystemTests/bin/Release/net8.0/BunnyBracelet.SystemTests.dll --verbosity normal --logger "trx;LogFileName=SystemTestResults.trx"
       if: ${{ runner.os == 'Linux' }}
+    - name: Publish container
+      run: dotnet publish /t:PublishContainer --configuration Release -p:VersionRevision=${{ github.run_number }} -p:ContainerArchiveOutputPath=../artifacts/bunny-bracelet-container.tar.gz -p:ContainerImageTag=r${{ github.run_number }} --verbosity normal
+      if: ${{ runner.os == 'Linux' }}
     - name: Create artifacts
       run: |
         $artifacts = 'artifacts'
@@ -125,3 +128,9 @@ jobs:
         name: BunnyBracelet-win-x64
         path: artifacts/BunnyBracelet-win-x64/
       if: ${{ runner.os == 'Windows' }}
+    - name: Publish BunnyBracelet (container)
+      uses: actions/upload-artifact@v4
+      with:
+        name: bunny-bracelet-container
+        path: artifacts/bunny-bracelet-container.tar.gz
+      if: ${{ runner.os == 'Linux' }}

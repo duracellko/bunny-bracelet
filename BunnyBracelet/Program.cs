@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace BunnyBracelet;
@@ -13,6 +14,11 @@ public static partial class Program
 
     public static void Main(string[] args)
     {
+        if (OutputVersion(args))
+        {
+            return;
+        }
+
         var builder = WebApplication.CreateSlimBuilder(args);
         var applicationConfigurationSection = builder.Configuration.GetSection(ApplicationName);
 
@@ -44,5 +50,22 @@ public static partial class Program
         app.MapHealthChecks("/health");
 
         app.Run();
+    }
+
+    private static bool OutputVersion(string[] args)
+    {
+        var hasVersionArg = args.Contains("--version");
+
+        if (hasVersionArg)
+        {
+            var assembly = typeof(Program).Assembly;
+            var attributes = assembly.GetCustomAttributes(typeof(AssemblyProductAttribute), false);
+            var productAttribute = (AssemblyProductAttribute?)attributes.FirstOrDefault();
+
+            Console.WriteLine("{0} {1}", productAttribute?.Product, assembly.GetName().Version);
+            Console.WriteLine("Licensed under Apache License 2.0");
+        }
+
+        return hasVersionArg;
     }
 }

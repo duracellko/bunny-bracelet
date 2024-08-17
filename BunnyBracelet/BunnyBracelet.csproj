@@ -1,12 +1,22 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PublishAot>true</PublishAot>
+    <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
+    <ContainerRepository>bunny-bracelet</ContainerRepository>
+    <Title>$(Product)</Title>
+    <Description>Bunny Bracelet program relays messages between multiple RabbitMQ instances over HTTP protocol.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="RabbitMQ.Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.Development.json">
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
