@@ -47,7 +47,7 @@ Linux
 
 Windows
 ```cmd
-BunnyBracelet.exe --urls http://localhost:8081 --BunnyBracelet:RabbitMQUri amqp://bunny:P2ssw0rd1@localhost:5672 --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://localhost:8080
+.\BunnyBracelet.exe --urls http://localhost:8081 --BunnyBracelet:RabbitMQUri amqp://bunny:P2ssw0rd1@localhost:5672 --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://localhost:8080
 ```
 
 .NET Runtime
@@ -64,7 +64,7 @@ Linux
 
 Windows
 ```cmd
-BunnyBracelet.exe --urls http://localhost:8080 --BunnyBracelet:RabbitMQUri amqp://bunny:P2ssw0rd2@localhost:5673 --BunnyBracelet:InboundExchange:Name my-inbound
+.\BunnyBracelet.exe --urls http://localhost:8080 --BunnyBracelet:RabbitMQUri amqp://bunny:P2ssw0rd2@localhost:5673 --BunnyBracelet:InboundExchange:Name my-inbound
 ```
 
 .NET Runtime

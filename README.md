@@ -65,7 +65,7 @@ Linux:
 
 Windows:
 ```cmd
-BunnyBracelet.exe --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote
+.\BunnyBracelet.exe --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote
 ```
 
 .NET Runtime:
@@ -84,7 +84,7 @@ Linux:
 
 Windows:
 ```cmd
-BunnyBracelet.exe --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote --BunnyBracelet:Endpoints:0:Queue:Name outbound-queue --BunnyBracelet:Endpoints:0:Queue:AutoDelete false
+.\BunnyBracelet.exe --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote --BunnyBracelet:Endpoints:0:Queue:Name outbound-queue --BunnyBracelet:Endpoints:0:Queue:AutoDelete false
 ```
 
 .NET Runtime:
@@ -101,12 +101,29 @@ Linux:
 
 Windows:
 ```cmd
-BunnyBracelet.exe --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny-1.remote --BunnyBracelet:Endpoints:1:Uri http://inbound-bunny-2.remote
+.\BunnyBracelet.exe --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny-1.remote --BunnyBracelet:Endpoints:1:Uri http://inbound-bunny-2.remote
 ```
 
 .NET Runtime:
 ```bash
 dotnet BunnyBracelet.dll --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny-1.remote --BunnyBracelet:Endpoints:1:Uri http://inbound-bunny-2.remote
+```
+
+When the receiving _inbound_ Bunny Bracelet requires authentication it is possible to specify a shared key that should be used to _sign_ the messages relayed by _outbound_ Bunny Bracelet. The key is encoded using [Base64](https://en.wikipedia.org/wiki/Base64). It is also required to specify, whether the key 1 or 2 should be used.
+
+Linux:
+```bash
+./BunnyBracelet --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote --BunnyBracelet:Authentication:Key1 Vi8rjMaNa3D92SepImiJiUjJUt3kyUc70w0tT+7+ztTV5QKQqzEfWmHIe9/CSOVIsc/fjADbQ7+ueuqjW42vUw== --BunnyBracelet:Authentication:UseKeyIndex 1
+```
+
+Windows:
+```cmd
+.\BunnyBracelet.exe --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote --BunnyBracelet:Authentication:Key1 Vi8rjMaNa3D92SepImiJiUjJUt3kyUc70w0tT+7+ztTV5QKQqzEfWmHIe9/CSOVIsc/fjADbQ7+ueuqjW42vUw== --BunnyBracelet:Authentication:UseKeyIndex 1
+```
+
+.NET Runtime:
+```bash
+dotnet BunnyBracelet.dll --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote --BunnyBracelet:Authentication:Key1 Vi8rjMaNa3D92SepImiJiUjJUt3kyUc70w0tT+7+ztTV5QKQqzEfWmHIe9/CSOVIsc/fjADbQ7+ueuqjW42vUw== --BunnyBracelet:Authentication:UseKeyIndex 1
 ```
 
 ### Inbound Bunny Bracelet
@@ -122,7 +139,7 @@ Linux:
 
 Windows:
 ```
-BunnyBracelet.exe --urls http://*:8080 --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:InboundExchange:Name my-inbound
+.\BunnyBracelet.exe --urls http://*:8080 --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:InboundExchange:Name my-inbound
 ```
 
 .NET Runtime:
@@ -139,12 +156,29 @@ Linux:
 
 Windows:
 ```cmd
-BunnyBracelet.exe --urls http://*:8080 --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost:5672 --BunnyBracelet:InboundExchange:Name my-inbound --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote
+.\BunnyBracelet.exe --urls http://*:8080 --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost:5672 --BunnyBracelet:InboundExchange:Name my-inbound --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote
 ```
 
 .NET Runtime:
 ```bash
 dotnet BunnyBracelet.dll --urls http://*:8080 --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost:5672 --BunnyBracelet:InboundExchange:Name my-inbound --BunnyBracelet:OutboundExchange:Name my-outbound --BunnyBracelet:Endpoints:0:Uri http://inbound-bunny.remote
+```
+
+It is possible to configure message authentication. It means that only messages _signed_ by a shared key would be accepted by _inbound_ Bunny Bracelet. The key is encoded using [Base64](https://en.wikipedia.org/wiki/Base64).
+
+Linux:
+```bash
+./BunnyBracelet --urls http://*:8080 --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:InboundExchange:Name my-inbound --BunnyBracelet:Authentication:Key1 Vi8rjMaNa3D92SepImiJiUjJUt3kyUc70w0tT+7+ztTV5QKQqzEfWmHIe9/CSOVIsc/fjADbQ7+ueuqjW42vUw==
+```
+
+Windows:
+```
+.\BunnyBracelet.exe --urls http://*:8080 --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:InboundExchange:Name my-inbound --BunnyBracelet:Authentication:Key1 Vi8rjMaNa3D92SepImiJiUjJUt3kyUc70w0tT+7+ztTV5QKQqzEfWmHIe9/CSOVIsc/fjADbQ7+ueuqjW42vUw==
+```
+
+.NET Runtime:
+```bash
+dotnet BunnyBracelet.dll --urls http://*:8080 --BunnyBracelet:RabbitMQUri amqp://guest:guest@localhost --BunnyBracelet:InboundExchange:Name my-inbound --BunnyBracelet:Authentication:Key1 Vi8rjMaNa3D92SepImiJiUjJUt3kyUc70w0tT+7+ztTV5QKQqzEfWmHIe9/CSOVIsc/fjADbQ7+ueuqjW42vUw==
 ```
 
 ## Configuration
@@ -170,6 +204,10 @@ Bunny Bracelet program can be configured by a configuration file `appsettings.js
             - **Name**: Name of the RabbitMQ queue. When the value is not specified or it is empty, then a new queue with unique name is created.
             - **Durable**: A value indicating whether the queue should be persisted and exist after restart of RabbitMQ. Default value is `false`.
             - **AutoDelete**: A value indicating whether the queue should be automatically deleted after all consumers are removed. It means that the queue would be deleted after ending Bunny Bracelet program. Default value is `true`.
+    - **Authentication**: Configuration of the authentication for communication between inbound and outbound Bunny Bracelet.
+        - **Key1**: Shared authentication key number 1 used for authentication of messages sent from inbound to outbound Bunny Bracelet. Both inbound and outbound Bunny Bracelets must have configured the same shared key. The value is arbitrary sequence of bytes encoded in [Base64](https://en.wikipedia.org/wiki/Base64). Recommended key size is at least 64 bytes.
+        - **Key2**: Shared authentication key number 2 used for authentication of messages sent from inbound to outbound Bunny Bracelet. Both inbound and outbound Bunny Bracelets must have configured the same shared key. The value is arbitrary sequence of bytes encoded in Base64. Recommended key size is at least 64 bytes.
+        - **UseKeyIndex**: A number that specifies, which shared authentication key should be used by inbound Bunny Bracelet. Possible values are 1 or 2. Default value is empty and it means that no authentication would be provided.
     - **Timeout**: Time in milliseconds to wait for a remote Bunny Bracelet to respond. The timeout applies, when forwarding an outbound message to a remote Bunny Bracelet. Default value is 30000 (30 seconds).
     - **RequeueDelay**: The delay time in millisecond between relay failure and returning of the message back to the queue. The delay time prevents exhausting of CPU and network resources. Default value is 1000 (1 second).
 
@@ -228,6 +266,19 @@ Configuration using environment variables is similar to configuration using comm
 As **Endpoints** setting is collection of endpoints, index is included in the full hierarchical name. For example configuration of the first endpoint is `SET BunnyBracelet__Endpoints__0__Uri=http://bunny.remote`.
 
 More information can be found in [ASP.NET Core configuration using environment variables](https://learn.microsoft.com/aspnet/core/fundamentals/configuration/#non-prefixed-environment-variables)
+
+### Authentication
+
+It is possible to configure _inbound_ Bunny Bracelet to accept a message, only if it is authenticated using shared key and [HMAC-SHA256](https://en.wikipedia.org/wiki/HMAC) authentication code. The same key must be configured for _outbound_ and _inbound_ Bunny Bracelet. There can be 2 keys configured: `BunnyBracelet:Authentication:Key1` and `BunnyBracelet:Authentication:Key2`. The configured values are arbitrary byte sequences encoded in [Base64](https://en.wikipedia.org/wiki/Base64). Recommended key length is at least 64 bytes.
+
+Inbound Bunny Bracelet accepts both keys, if 2 keys are configured. It is possible to configure only single key (either `Key1` or `Key2`), but it is not recommended. The outbound Bunny Bracelet must specify, which key should be used for authentication. `Key1` can be selected by configuration `BunnyBracelet:Authentication:UseKeyIndex=1` and `Key2` can be selected by configuration `BunnyBracelet:Authentication:UseKeyIndex=2`.
+
+The program uses 2 shared authentication keys for easier key rotation. When your application uses `Key1` for authentication (by specifying `BunnyBracelet:Authentication:UseKeyIndex=1`) and would like to rotate the keys, it is not recommended to simply change the keys to the new values. It is very likely that there can be some delay or time difference between depoyment of inbound and outbound Bunny Bracelet. So the 2 programs would use different authentication keys for some time. This would lead to failed authentication, and thus lost of messages. Therefore, it is recommended to change the configuration in 2 steps:
+
+1. Change inbound Bunny Bracelet to use `Key2` by setting `BunnyBracelet:Authentication:UseKeyIndex=2`.
+2. Then change `Key1` configuration to a new value.
+
+Then it is possible to rotate `Key2` in similar way.
 
 ## Known limitations
 
