@@ -1,25 +1,34 @@
 ﻿<Project>
 
   <PropertyGroup>
+    <Version>1.0.0</Version>
     <VersionRevision Condition="'$(VersionRevision)'==''">0</VersionRevision>
-    <AssemblyVersion>1.0.0.$(VersionRevision)</AssemblyVersion>
-    <FileVersion>1.0.0.$(VersionRevision)</FileVersion>
-    <Company>Duracellko</Company>
+    <AssemblyVersion>$(Version).$(VersionRevision)</AssemblyVersion>
+    <FileVersion>$(Version).$(VersionRevision)</FileVersion>
+    <Product>Bunny Bracelet</Product>
+    <Company>Duracellko.NET</Company>
     <Copyright>Copyright © Duracellko 2024</Copyright>
     <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
 
   <PropertyGroup>
     <Nullable>enable</Nullable>
-	<ImplicitUsings>enable</ImplicitUsings>
-	<InvariantGlobalization>true</InvariantGlobalization>
-	<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <TreatSpecificWarningsAsErrors />
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>AllEnabledByDefault</AnalysisMode>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <NoWarn>CA1014</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Authors>$(Company)</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/duracellko/bunny-bracelet</PackageProjectUrl>
+    <SourceRevisionId Condition="'$(SourceRevisionId)'==''">$(VersionRevision)</SourceRevisionId>
   </PropertyGroup>
 
   <ItemGroup>
