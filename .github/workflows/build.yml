@@ -6,6 +6,8 @@ on:
   push:
     branches:
     - main
+    tags:
+    - release-*
   pull_request:
     branches:
     - main
@@ -46,7 +48,7 @@ jobs:
       run: dotnet test ./BunnyBracelet.SystemTests/bin/Release/net8.0/BunnyBracelet.SystemTests.dll --verbosity normal --logger "trx;LogFileName=SystemTestResults.trx"
       if: ${{ runner.os == 'Linux' }}
     - name: Publish container
-      run: dotnet publish /t:PublishContainer --configuration Release -p:VersionRevision=${{ github.run_number }} -p:ContainerArchiveOutputPath=../artifacts/bunny-bracelet-container.tar.gz -p:ContainerImageTag=r${{ github.run_number }} --verbosity normal
+      run: dotnet publish /t:PublishContainer --configuration Release -p:VersionRevision=${{ github.run_number }} -p:ContainerArchiveOutputPath=../artifacts/bunny-bracelet-container.tar.gz --verbosity normal
       if: ${{ runner.os == 'Linux' }}
     - name: Create artifacts
       run: |
@@ -134,4 +136,67 @@ jobs:
       with:
         name: bunny-bracelet-container
         path: artifacts/bunny-bracelet-container.tar.gz
+        compression-level: 0
       if: ${{ runner.os == 'Linux' }}
+
+  release:
+    runs-on: ubuntu-22.04
+
+    needs: build
+
+    if: ${{ github.ref_type == 'tag' && startsWith(github.ref_name, 'release-') }}
+
+    env:
+      DOCKERHUB_USERNAME: duracellko
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+    - name: Create release artifacts
+      run: |
+        Compress-Archive -Path './BunnyBracelet/*' -DestinationPath './BunnyBracelet.zip'
+        Compress-Archive -Path './BunnyBracelet-linux-x64/*' -DestinationPath './BunnyBracelet-linux-x64.zip'
+        Compress-Archive -Path './BunnyBracelet-win-x64/*' -DestinationPath './BunnyBracelet-win-x64.zip'
+    - name: Get Release version
+      id: get_release_version
+      run: |
+        chmod a+x ./BunnyBracelet-linux-x64/BunnyBracelet
+        $bunnyBraceletVersion = ./BunnyBracelet-linux-x64/BunnyBracelet --version
+        Write-Output $bunnyBraceletVersion
+
+        $releaseName = $bunnyBraceletVersion | Select-Object -First 1
+        $releaseVersion = $releaseName.Replace('Bunny', '', [System.StringComparison]::OrdinalIgnoreCase)
+        $releaseVersion = $releaseVersion.Replace('Bracelet', '', [System.StringComparison]::OrdinalIgnoreCase)
+        $releaseVersion = $releaseVersion.Trim()
+        $releaseTag = 'v' + $releaseVersion
+
+        $actionOutput = @(
+            "release_name=$releaseName"
+            "release_version=$releaseVersion"
+            "release_tag=$releaseTag"
+        )
+        Add-Content -Path $env:GITHUB_OUTPUT -Value $actionOutput
+        Write-Output $actionOutput
+
+        $bunnyBraceletVersion | Select-Object -Skip 1 -First 1 | Set-Content -Path 'ReleaseBody.md'
+        Write-Output "ReleaseBody.md"
+    - name: Create Release
+      uses: ncipollo/release-action@v1
+      with:
+        name: ${{ steps.get_release_version.outputs.release_name }}
+        draft: true
+        artifacts: "BunnyBracelet.zip,BunnyBracelet-linux-x64.zip,BunnyBracelet-win-x64.zip"
+        bodyFile: ReleaseBody.md
+        tag: ${{ github.ref_type == 'tag' && github.ref_name || steps.get_release_version.outputs.release_tag }}
+    - name: Docker login
+      uses: docker/login-action@v3
+      with:
+        username: ${{ env.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    - name: Push Docker image
+      run: |
+        docker image load -i bunny-bracelet-container/bunny-bracelet-container.tar.gz
+        docker push --all-tags duracellko/bunny-bracelet
