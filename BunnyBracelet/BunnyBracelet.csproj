@@ -4,7 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <PublishAot>true</PublishAot>
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
-    <ContainerRepository>bunny-bracelet</ContainerRepository>
+    <ContainerRepository>duracellko/bunny-bracelet</ContainerRepository>
+    <ContainerImageTagVersion>$([System.Version]::Parse($(Version)).ToString(2))</ContainerImageTagVersion>
+    <ContainerImageTags>$(FileVersion);$(ContainerImageTagVersion);latest</ContainerImageTags>
     <Title>$(Product)</Title>
     <Description>Bunny Bracelet program relays messages between multiple RabbitMQ instances over HTTP protocol.</Description>
   </PropertyGroup>
