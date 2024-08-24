@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace BunnyBracelet;
@@ -63,6 +64,8 @@ public static partial class Program
             var productAttribute = (AssemblyProductAttribute?)attributes.FirstOrDefault();
 
             Console.WriteLine("{0} {1}", productAttribute?.Product, assembly.GetName().Version);
+            Console.Write("  ");
+            Console.WriteLine(RuntimeInformation.FrameworkDescription);
             Console.WriteLine("Licensed under Apache License 2.0");
         }
 
