@@ -7,6 +7,7 @@
     <ContainerRepository>duracellko/bunny-bracelet</ContainerRepository>
     <ContainerImageTagVersion>$([System.Version]::Parse($(Version)).ToString(2))</ContainerImageTagVersion>
     <ContainerImageTags>$(FileVersion);$(ContainerImageTagVersion);latest</ContainerImageTags>
+    <ContainerFamily>bookworm-slim</ContainerFamily>
     <Title>$(Product)</Title>
     <Description>Bunny Bracelet program relays messages between multiple RabbitMQ instances over HTTP protocol.</Description>
   </PropertyGroup>
