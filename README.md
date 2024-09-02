@@ -40,7 +40,7 @@ Bunny Bracelet is natively supported on Linux (x64), Windows (x64) and any platf
 
 ### Docker
 
-Comming soon
+Please, check [Docker repository](https://hub.docker.com/r/duracellko/bunny-bracelet).
 
 ## How to use
 
@@ -283,3 +283,7 @@ Then it is possible to rotate `Key2` in similar way.
 ## Known limitations
 
 [Known limitations](docs/known-limitations.md)
+
+## FAQ
+
+- [Frequently Asked Questions](docs/faq.md)
