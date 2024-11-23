@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -28,7 +29,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
     private static readonly Lazy<string> LazyBunnyBraceletPath = new Lazy<string>(GetBunnyBraceletPath);
 
     private readonly StringBuilder output = new StringBuilder();
-    private readonly object outputLock = new object();
+    private readonly Lock outputLock = new Lock();
     private Process? process;
 
     private BunnyRunner(
@@ -118,7 +119,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         IReadOnlyList<string> endpoints = Array.Empty<string>();
         if (endpointPorts is not null)
         {
-            endpoints = endpointPorts.Select(p => GetUri(p)).ToList();
+            endpoints = endpointPorts.Select(GetUri).ToList();
         }
 
         return Create(port, rabbitMQUri, inboundExchange, outboundExchange, endpoints);
@@ -155,21 +156,15 @@ internal sealed class BunnyRunner : IAsyncDisposable
         ExchangeSettings? outboundExchange = null,
         IReadOnlyList<EndpointSettings>? endpoints = null)
     {
-        if (inboundExchange == null)
+        inboundExchange ??= new ExchangeSettings
         {
-            inboundExchange = new ExchangeSettings
-            {
-                Name = DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
-            };
-        }
+            Name = DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
+        };
 
-        if (outboundExchange == null)
+        outboundExchange ??= new ExchangeSettings
         {
-            outboundExchange = new ExchangeSettings
-            {
-                Name = DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
-            };
-        }
+            Name = DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
+        };
 
         endpoints ??= Array.Empty<EndpointSettings>();
 
@@ -235,6 +230,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         }
     }
 
+    [SuppressMessage("Style", "IDE0072:Add missing cases", Justification = "Other HTTP status codes are unexpected.")]
     public async Task<HealthStatus> GetHealthStatus()
     {
         using var httpClient = new HttpClient();

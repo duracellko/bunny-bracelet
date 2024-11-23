@@ -104,11 +104,11 @@ public class ExtendedTailStreamTest
     [DynamicData(nameof(ReadEmptyDataTestData))]
     public async Task ReadAsync_EmptyData_ReadsNoData(int tailSize)
     {
-        var result = await ExtendTailAsync(Array.Empty<byte>(), tailSize);
+        var (data, tail) = await ExtendTailAsync(Array.Empty<byte>(), tailSize);
 
-        Assert.AreEqual(0, result.data.Length);
-        Assert.AreEqual(tailSize, result.tail.Length);
-        AssertBytesAreZero(result.tail);
+        Assert.AreEqual(0, data.Length);
+        Assert.AreEqual(tailSize, tail.Length);
+        AssertBytesAreZero(tail);
     }
 
     [TestMethod]
@@ -169,6 +169,7 @@ public class ExtendedTailStreamTest
     }
 
     [TestMethod]
+    [SuppressMessage("Reliability", "CA2022:Avoid inexact read with 'Stream.Read'", Justification = "Testing ReadAsync method.")]
     public async Task ReadAsync_BufferIsNull_ArgumentNullException()
     {
         using var stream = new MemoryStream(120);
@@ -179,6 +180,7 @@ public class ExtendedTailStreamTest
 
     [TestMethod]
     [DynamicData(nameof(ReadIndexOrCountIsInvalidTestData))]
+    [SuppressMessage("Reliability", "CA2022:Avoid inexact read with 'Stream.Read'", Justification = "Testing ReadAsync method.")]
     public async Task ReadAsync_IndexOrCountIsInvalid_ArgumentOutOfRangeException(int index, int count)
     {
         using var stream = new MemoryStream(120);
@@ -192,11 +194,11 @@ public class ExtendedTailStreamTest
     [DynamicData(nameof(ReadEmptyDataTestData))]
     public void Read_EmptyData_ReadsNoData(int tailSize)
     {
-        var result = ExtendTail(Array.Empty<byte>(), tailSize);
+        var (data, tail) = ExtendTail(Array.Empty<byte>(), tailSize);
 
-        Assert.AreEqual(0, result.data.Length);
-        Assert.AreEqual(tailSize, result.tail.Length);
-        AssertBytesAreZero(result.tail);
+        Assert.AreEqual(0, data.Length);
+        Assert.AreEqual(tailSize, tail.Length);
+        AssertBytesAreZero(tail);
     }
 
     [TestMethod]
@@ -262,7 +264,7 @@ public class ExtendedTailStreamTest
         using var stream = new MemoryStream(120);
         using var target = new ExtendedTailStream(stream, 0);
 
-        Assert.ThrowsExceptionAsync<ArgumentNullException>(async () => await target.ReadAsync(null!, 0, 10));
+        Assert.ThrowsException<ArgumentNullException>(() => target.Read(null!, 0, 10));
     }
 
     [TestMethod]
@@ -273,7 +275,7 @@ public class ExtendedTailStreamTest
         using var target = new ExtendedTailStream(stream, 0);
 
         var buffer = new byte[50];
-        Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(async () => await target.ReadAsync(buffer, index, count));
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => target.Read(buffer, index, count));
     }
 
     [TestMethod]

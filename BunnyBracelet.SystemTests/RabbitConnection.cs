@@ -22,7 +22,7 @@ internal sealed class RabbitConnection : IDisposable
     {
         Uri = new Uri(uri);
         connection = new Lazy<IConnection>(CreateConnection);
-        model = new Lazy<IModel>(() => connection.Value.CreateModel());
+        model = new Lazy<IModel>(connection.Value.CreateModel);
     }
 
     public Uri Uri { get; }

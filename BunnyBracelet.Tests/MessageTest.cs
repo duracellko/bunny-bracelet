@@ -46,7 +46,7 @@ public class MessageTest
 
         Assert.AreEqual(new ReadOnlyMemory<byte>(null), result.Body);
         Assert.IsNull(result.Properties);
-        Assert.AreEqual(default(DateTime), result.Timestamp);
+        Assert.AreEqual(default, result.Timestamp);
         Assert.AreEqual(DateTimeKind.Unspecified, result.Timestamp.Kind);
     }
 
@@ -57,7 +57,7 @@ public class MessageTest
 
         Assert.AreEqual(new ReadOnlyMemory<byte>(null), result.Body);
         Assert.IsNull(result.Properties);
-        Assert.AreEqual(default(DateTime), result.Timestamp);
+        Assert.AreEqual(default, result.Timestamp);
         Assert.AreEqual(DateTimeKind.Unspecified, result.Timestamp.Kind);
     }
 

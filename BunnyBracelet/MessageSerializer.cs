@@ -26,7 +26,7 @@ namespace BunnyBracelet;
 public class MessageSerializer : IMessageSerializer
 {
     // RMQR = RabbitMQ Relay
-    private static readonly byte[] Preamble = new byte[] { 82, 77, 81, 82 };
+    private static readonly byte[] Preamble = [82, 77, 81, 82];
     private static readonly Encoding TextEncoding = Encoding.UTF8;
 
     public async ValueTask<Message> ReadMessage(Stream stream, Func<IBasicProperties> propertiesFactory)
@@ -1040,10 +1040,7 @@ public class MessageSerializer : IMessageSerializer
 
         public void CreateProperties()
         {
-            if (Properties is null)
-            {
-                Properties = propertiesFactory();
-            }
+            Properties ??= propertiesFactory();
         }
 
         public void AddHeader(string key, object value)

@@ -4,7 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Docker.DotNet" Version="3.125.15" />
-    <PackageVersion Include="MSTest" Version="3.6.1" />
+    <PackageVersion Include="MSTest" Version="3.6.3" />
     <PackageVersion Include="RabbitMQ.Client" Version="6.8.1" />
   </ItemGroup>
   <ItemGroup>

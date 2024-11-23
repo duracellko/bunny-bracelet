@@ -325,8 +325,8 @@ internal sealed class RabbitRunner : IDisposable
                 Since = startTime.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)
             };
             using var outputStream = await dockerClient.Value.Containers.GetContainerLogsAsync(containerId, false, parameters);
-            var containerOutput = await outputStream.ReadOutputToEndAsync(default);
-            if (containerOutput.stdout.Contains(searchText, StringComparison.Ordinal))
+            var (stdout, _) = await outputStream.ReadOutputToEndAsync(default);
+            if (stdout.Contains(searchText, StringComparison.Ordinal))
             {
                 return true;
             }
