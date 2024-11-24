@@ -16,7 +16,7 @@ internal sealed class RabbitConnection : IDisposable
 {
     private readonly Lazy<IConnection> connection;
     private readonly Lazy<IModel> model;
-    private readonly List<MessageConsumer> messageConsumers = new List<MessageConsumer>();
+    private readonly List<MessageConsumer> messageConsumers = [];
 
     public RabbitConnection(string uri)
     {

@@ -221,7 +221,7 @@ public class SystemTest
         static List<RabbitMessage> CreateMessages(RabbitConnection connection, string prefix)
         {
             var result = new List<RabbitMessage>(1000);
-            for (int i = 0; i < 1000; i++)
+            for (var i = 0; i < 1000; i++)
             {
                 var properties = connection.CreateProperties();
                 properties.MessageId = prefix + i.ToString("00000", CultureInfo.InvariantCulture);
@@ -293,19 +293,21 @@ public class SystemTest
 
         static Dictionary<string, object> CreateHeaders()
         {
-            var headers = new Dictionary<string, object>();
-            headers.Add("test binary", Encoding.UTF8.GetBytes("My test binary value"));
-            headers.Add("test boolean", true);
-            headers.Add("test byte", (byte)22);
-            headers.Add("test int16", short.MinValue);
-            headers.Add("test int32", int.MinValue);
-            headers.Add("test int64", long.MinValue);
-            headers.Add("test uint16", ushort.MaxValue);
-            headers.Add("test uint32", uint.MaxValue);
-            headers.Add("test single", 123.456f);
-            headers.Add("test double", 987654e-56);
-            headers.Add("test decimal", 12345.6789m);
-            headers.Add("test timestamp", new AmqpTimestamp(DateTimeOffset.Now.ToUnixTimeSeconds()));
+            var headers = new Dictionary<string, object>
+            {
+                { "test binary", Encoding.UTF8.GetBytes("My test binary value") },
+                { "test boolean", true },
+                { "test byte", (byte)22 },
+                { "test int16", short.MinValue },
+                { "test int32", int.MinValue },
+                { "test int64", long.MinValue },
+                { "test uint16", ushort.MaxValue },
+                { "test uint32", uint.MaxValue },
+                { "test single", 123.456f },
+                { "test double", 987654e-56 },
+                { "test decimal", 12345.6789m },
+                { "test timestamp", new AmqpTimestamp(DateTimeOffset.Now.ToUnixTimeSeconds()) }
+            };
 
             var innerList = new List<object>
             {
@@ -367,7 +369,7 @@ public class SystemTest
             using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
-            for (int i = 0; i < 3; i++)
+            for (var i = 0; i < 3; i++)
             {
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
@@ -493,7 +495,7 @@ public class SystemTest
 
             using (var connection1 = rabbit1.CreateConnection())
             {
-                for (int i = 0; i < 3; i++)
+                for (var i = 0; i < 3; i++)
                 {
                     var properties = connection1.CreateProperties();
                     properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
@@ -597,7 +599,7 @@ public class SystemTest
             using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
-            for (int i = 0; i < 3; i++)
+            for (var i = 0; i < 3; i++)
             {
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
@@ -684,7 +686,7 @@ public class SystemTest
             using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
-            for (int i = 0; i < 3; i++)
+            for (var i = 0; i < 3; i++)
             {
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
@@ -956,7 +958,7 @@ public class SystemTest
             httpClient.BaseAddress = new Uri(bunny.Uri);
 
             var message = GetAuthenticatedMessage(key);
-            message[message.Length - 1] ^= 1;
+            message[^1] ^= 1;
             if (invalidMessage)
             {
                 message[12] = 12;
@@ -1209,7 +1211,7 @@ public class SystemTest
     // Disclaimer: No bunnies get harmed by running this method or any of these tests.
     private static async Task PutBunniesDown(params BunnyRunner[] bunnies)
     {
-        for (int i = 0; i < bunnies.Length; i++)
+        for (var i = 0; i < bunnies.Length; i++)
         {
             var bunny = bunnies[i];
             await bunny.Stop();
@@ -1219,7 +1221,7 @@ public class SystemTest
             Trace.WriteLine(bunny.GetOutput());
         }
 
-        for (int i = 0; i < bunnies.Length; i++)
+        for (var i = 0; i < bunnies.Length; i++)
         {
             Assert.AreEqual(0, bunnies[i].ExitCode, $"Exit code - Bunny {i + 1}");
         }
@@ -1302,7 +1304,7 @@ public class SystemTest
         int count = 2000)
     {
         var result = new List<RabbitMessage>();
-        for (int i = 0; i < count; i++)
+        for (var i = 0; i < count; i++)
         {
             var messageResult = await WaitForMessage(queue);
             result.Add(messageResult);
@@ -1334,7 +1336,7 @@ public class SystemTest
 
     private static async Task AssertHealthy(params BunnyRunner[] bunnies)
     {
-        for (int i = 0; i < bunnies.Length; i++)
+        for (var i = 0; i < bunnies.Length; i++)
         {
             var bunny = bunnies[i];
             var healthStatus = await bunny.GetHealthStatus();
@@ -1344,7 +1346,7 @@ public class SystemTest
 
     private static async Task AssertUnhealthy(params BunnyRunner[] bunnies)
     {
-        for (int i = 0; i < bunnies.Length; i++)
+        for (var i = 0; i < bunnies.Length; i++)
         {
             var bunny = bunnies[i];
             var healthStatus = await bunny.GetHealthStatus();
@@ -1359,7 +1361,7 @@ public class SystemTest
         {
             Assert.IsNotNull(collection[0]);
 
-            for (int i = 1; i < collection.Count; i++)
+            for (var i = 1; i < collection.Count; i++)
             {
                 Assert.IsNotNull(collection[i]);
                 Assert.IsTrue(collection[i - 1].CompareTo(collection[i]) < 0, "Unexpected order '{0}' > '{1}'.", collection[i - 1], collection[i]);

@@ -9,7 +9,7 @@ public class RelayOptions
     /// Gets a collection of endpoints that the messages
     /// from <see cref="RabbitOptions.OutboundExchange"/> should be relayed to.
     /// </summary>
-    public IList<RelayEndpointOptions> Endpoints { get; } = new List<RelayEndpointOptions>();
+    public IList<RelayEndpointOptions> Endpoints { get; } = [];
 
     /// <summary>
     /// Gets or sets configuration of message authentication.

@@ -342,7 +342,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         SetInboundExchangeEnvironment(result.Environment);
         SetOutboundExchangeEnvironment(result.Environment);
 
-        for (int i = 0; i < Endpoints.Count; i++)
+        for (var i = 0; i < Endpoints.Count; i++)
         {
             SetEndpointEnvironment(result.Environment, Endpoints[i], i);
         }

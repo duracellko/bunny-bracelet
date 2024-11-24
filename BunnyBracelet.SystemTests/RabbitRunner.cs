@@ -31,7 +31,7 @@ internal sealed class RabbitRunner : IDisposable
     private const string NetworkName = "bridge";
 
     private static readonly SemaphoreSlim PullImageSemaphore = new SemaphoreSlim(1, 1);
-    private static readonly Dictionary<int, string> EnvironmentPasswords = new Dictionary<int, string>();
+    private static readonly Dictionary<int, string> EnvironmentPasswords = [];
 
     private readonly Lazy<DockerClient> dockerClient = new Lazy<DockerClient>(CreateDockerClient);
     private readonly string containerName;
@@ -131,7 +131,7 @@ internal sealed class RabbitRunner : IDisposable
 
         foreach (var container in containers)
         {
-            bool isInactiveEnvironment = container.Labels.TryGetValue(EnvironmentLabel, out var label) &&
+            var isInactiveEnvironment = container.Labels.TryGetValue(EnvironmentLabel, out var label) &&
                 label != EnvironmentId;
             if (isInactiveEnvironment)
             {
@@ -198,8 +198,10 @@ internal sealed class RabbitRunner : IDisposable
         var result = new Dictionary<string, IDictionary<string, bool>>();
         foreach (var keyValuePair in filters)
         {
-            var value = new Dictionary<string, bool>();
-            value.Add(keyValuePair.Value, true);
+            var value = new Dictionary<string, bool>
+            {
+                { keyValuePair.Value, true }
+            };
             result.Add(keyValuePair.Key, value);
         }
 
@@ -299,11 +301,11 @@ internal sealed class RabbitRunner : IDisposable
                     }
                 }
             },
-            Env = new List<string>
-            {
+            Env =
+            [
                 "RABBITMQ_DEFAULT_USER=" + Username,
                 "RABBITMQ_DEFAULT_PASS=" + Password
-            },
+            ],
             Labels = new Dictionary<string, string>()
             {
                 { EnvironmentLabel, EnvironmentId },

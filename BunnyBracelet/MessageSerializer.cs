@@ -477,7 +477,7 @@ public class MessageSerializer : IMessageSerializer
         var itemsCount = await ReadInt32(reader);
         var result = new List<object>(itemsCount);
 
-        for (int i = 0; i < itemsCount; i++)
+        for (var i = 0; i < itemsCount; i++)
         {
             result.Add(await ReadHeaderValue(reader));
         }
@@ -680,7 +680,7 @@ public class MessageSerializer : IMessageSerializer
         var buffer = writer.GetSpan(10);
         buffer[0] = Codes.Property;
         buffer[1] = code;
-        buffer = buffer.Slice(2);
+        buffer = buffer[2..];
         BinaryPrimitives.WriteInt64LittleEndian(buffer, value);
         writer.Advance(10);
     }
@@ -836,9 +836,9 @@ public class MessageSerializer : IMessageSerializer
         // 1 byte = code, 4 bytes body length
         var buffer = writer.GetMemory(5 + body.Length);
         buffer.Span[0] = Codes.Body;
-        buffer = buffer.Slice(1);
+        buffer = buffer[1..];
         BinaryPrimitives.WriteInt32LittleEndian(buffer.Span, body.Length);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         body.CopyTo(buffer);
         writer.Advance(5 + body.Length);
     }
@@ -927,11 +927,11 @@ public class MessageSerializer : IMessageSerializer
         decimal.GetBits(value, intBuffer);
 
         BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[0]);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[1]);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[2]);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[3]);
 
         writer.Advance(16);
@@ -942,8 +942,8 @@ public class MessageSerializer : IMessageSerializer
         // 4 bytes per character is very conservative for UTF-8
         var buffer = writer.GetSpan(4 + (value.Length * 4));
 
-        var lengthBuffer = buffer.Slice(0, 4);
-        var bytesCount = TextEncoding.GetBytes(value, buffer.Slice(4));
+        var lengthBuffer = buffer[..4];
+        var bytesCount = TextEncoding.GetBytes(value, buffer[4..]);
         BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, bytesCount);
 
         writer.Advance(bytesCount + 4);
@@ -953,7 +953,7 @@ public class MessageSerializer : IMessageSerializer
     {
         var buffer = writer.GetSpan(4 + value.Length);
         BinaryPrimitives.WriteInt32LittleEndian(buffer, value.Length);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         value.CopyTo(buffer);
         writer.Advance(4 + value.Length);
     }

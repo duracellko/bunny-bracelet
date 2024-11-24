@@ -16,7 +16,7 @@ public static class StreamExtentions
         try
         {
             // 128 bytes is size of 2 blocks of SHA256.
-            var bufferMemory = buffer.AsMemory().Slice(0, 128);
+            var bufferMemory = buffer.AsMemory()[..128];
 
             var bytesRead = await stream.ReadAsync(buffer);
             while (bytesRead > 0)

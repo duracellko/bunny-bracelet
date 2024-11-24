@@ -369,7 +369,7 @@ public class ExtendedTailStreamTest
 
     private static void AssertBytesAreZero(byte[] data, int index, int count)
     {
-        for (int i = 0; i < count; i++)
+        for (var i = 0; i < count; i++)
         {
             Assert.AreEqual(0, data[index + i]);
         }

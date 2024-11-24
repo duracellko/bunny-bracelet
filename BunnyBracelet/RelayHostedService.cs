@@ -25,7 +25,7 @@ public class RelayHostedService : IHostedService
     private readonly IOptions<RelayOptions> options;
     private readonly IOptions<RabbitOptions> rabbitOptions;
     private readonly ILogger<RelayHostedService> logger;
-    private readonly List<IDisposable> consumers = new List<IDisposable>();
+    private readonly List<IDisposable> consumers = [];
 
     public RelayHostedService(
         RabbitService rabbitService,
