@@ -8,11 +8,11 @@ namespace BunnyBracelet.Tests;
 [TestClass]
 public class MessageSerializerTest
 {
-    private static readonly DateTime TestTimestamp = new DateTime(2024, 8, 11, 23, 2, 32, 922, 129, DateTimeKind.Utc);
-    private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-    private static readonly DateTime Y2K38 = new DateTime(2038, 1, 19, 3, 14, 7, DateTimeKind.Unspecified);
+    private static readonly DateTime TestTimestamp = new(2024, 8, 11, 23, 2, 32, 922, 129, DateTimeKind.Utc);
+    private static readonly DateTime UnixEpoch = new(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime Y2K38 = new(2038, 1, 19, 3, 14, 7, DateTimeKind.Unspecified);
 
-    private static readonly Lazy<Random> Random = new Lazy<Random>(() => new Random());
+    private static readonly Lazy<Random> Random = new(() => new Random());
 
     [TestMethod]
     public async Task WriteAndRead_EmptyMessage()

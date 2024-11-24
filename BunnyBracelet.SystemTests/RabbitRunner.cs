@@ -30,10 +30,10 @@ internal sealed class RabbitRunner : IDisposable
     private const string PortLabel = "BunnyBracelet-Port";
     private const string NetworkName = "bridge";
 
-    private static readonly SemaphoreSlim PullImageSemaphore = new SemaphoreSlim(1, 1);
+    private static readonly SemaphoreSlim PullImageSemaphore = new(1, 1);
     private static readonly Dictionary<int, string> EnvironmentPasswords = [];
 
-    private readonly Lazy<DockerClient> dockerClient = new Lazy<DockerClient>(CreateDockerClient);
+    private readonly Lazy<DockerClient> dockerClient = new(CreateDockerClient);
     private readonly string containerName;
     private string? containerId;
 
@@ -174,7 +174,7 @@ internal sealed class RabbitRunner : IDisposable
         await dockerClient.Value.Containers.StopContainerAsync(containerId, new ContainerStopParameters());
     }
 
-    public RabbitConnection CreateConnection() => new RabbitConnection(Uri);
+    public RabbitConnection CreateConnection() => new(Uri);
 
     public void Dispose()
     {
@@ -292,7 +292,7 @@ internal sealed class RabbitRunner : IDisposable
                         RabbitMQPort.ToString(CultureInfo.InvariantCulture) + "/tcp",
                         new List<PortBinding>()
                         {
-                            new PortBinding
+                            new()
                             {
                                 HostIP = string.Empty,
                                 HostPort = Port.ToString(CultureInfo.InvariantCulture)

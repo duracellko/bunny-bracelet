@@ -236,41 +236,25 @@ public class MessageSerializer : IMessageSerializer
     private static async ValueTask<object> ReadHeaderValue(PipeReader reader)
     {
         var valueTypeCode = await ReadByte(reader);
-        switch (valueTypeCode)
+        return valueTypeCode switch
         {
-            case ValueTypeCodes.ByteArray:
-                return await ReadByteArray(reader);
-            case ValueTypeCodes.Boolean:
-                return await ReadBoolean(reader);
-            case ValueTypeCodes.Byte:
-                return await ReadByte(reader);
-            case ValueTypeCodes.Int16:
-                return await ReadInt16(reader);
-            case ValueTypeCodes.Int32:
-                return await ReadInt32(reader);
-            case ValueTypeCodes.Int64:
-                return await ReadInt64(reader);
-            case ValueTypeCodes.UInt16:
-                return await ReadUInt16(reader);
-            case ValueTypeCodes.UInt32:
-                return await ReadUInt32(reader);
-            case ValueTypeCodes.UInt64:
-                return await ReadUInt64(reader);
-            case ValueTypeCodes.Single:
-                return await ReadSingle(reader);
-            case ValueTypeCodes.Double:
-                return await ReadDouble(reader);
-            case ValueTypeCodes.Decimal:
-                return await ReadDecimal(reader);
-            case ValueTypeCodes.String:
-                return await ReadString(reader);
-            case ValueTypeCodes.Timestamp:
-                return await ReadTimestamp(reader);
-            case ValueTypeCodes.List:
-                return await ReadList(reader);
-            default:
-                throw new MessageException($"Unexpected header value type code {valueTypeCode}.");
-        }
+            ValueTypeCodes.ByteArray => await ReadByteArray(reader),
+            ValueTypeCodes.Boolean => await ReadBoolean(reader),
+            ValueTypeCodes.Byte => await ReadByte(reader),
+            ValueTypeCodes.Int16 => await ReadInt16(reader),
+            ValueTypeCodes.Int32 => await ReadInt32(reader),
+            ValueTypeCodes.Int64 => await ReadInt64(reader),
+            ValueTypeCodes.UInt16 => await ReadUInt16(reader),
+            ValueTypeCodes.UInt32 => await ReadUInt32(reader),
+            ValueTypeCodes.UInt64 => await ReadUInt64(reader),
+            ValueTypeCodes.Single => await ReadSingle(reader),
+            ValueTypeCodes.Double => await ReadDouble(reader),
+            ValueTypeCodes.Decimal => await ReadDecimal(reader),
+            ValueTypeCodes.String => await ReadString(reader),
+            ValueTypeCodes.Timestamp => await ReadTimestamp(reader),
+            ValueTypeCodes.List => await ReadList(reader),
+            _ => throw new MessageException($"Unexpected header value type code {valueTypeCode}."),
+        };
     }
 
     private static async ValueTask<string> ReadString(PipeReader reader)

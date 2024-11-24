@@ -17,9 +17,9 @@ public sealed class RabbitService : IDisposable
 
     // Lazy<T> cannot be used, because it caches exception.
 #if NET9_0_OR_GREATER
-    private readonly Lock connectionLock = new Lock();
+    private readonly Lock connectionLock = new();
 #else
-    private readonly object connectionLock = new object();
+    private readonly object connectionLock = new();
 #endif
     private IConnection? connectionStore;
     private IModel? sendChannelStore;

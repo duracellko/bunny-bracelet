@@ -23,7 +23,7 @@ public class SystemTest
 {
     private const string OutputSeparator = "----------";
 
-    private static readonly Lazy<Random> Random = new Lazy<Random>(() => new Random());
+    private static readonly Lazy<Random> Random = new(() => new Random());
 
     [ClassInitialize]
     [SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "Required by MS Test framework.")]
@@ -111,7 +111,7 @@ public class SystemTest
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
         using var rabbit3 = new RabbitRunner(5675);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPorts: new[] { 5002, 5003 });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPorts: [5002, 5003]);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
         SetupAuthentication(keyIndex, 32, bunny1, bunny2, bunny3);
@@ -425,7 +425,7 @@ public class SystemTest
             QueueName = "large-msg-queue-" + Guid.NewGuid().ToString(),
             AutoDelete = false
         };
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: [endpoint]);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
 
         await rabbit1.Cleanup();
@@ -474,12 +474,12 @@ public class SystemTest
         var inboundExchange1 = CreateExchangeSettings("durable-inbound");
         var outboundExchange1 = CreateExchangeSettings("durable-outbound");
         var endpoint1 = CreateEndpointSettings(5002);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange1, outboundExchange1, endpoints: new[] { endpoint1 });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange1, outboundExchange1, endpoints: [endpoint1]);
 
         var inboundExchange2 = CreateExchangeSettings("durable-inbound");
         var outboundExchange2 = CreateExchangeSettings("durable-outbound");
         var endpoint2 = CreateEndpointSettings(5001);
-        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, inboundExchange2, outboundExchange2, endpoints: new[] { endpoint2 });
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, inboundExchange2, outboundExchange2, endpoints: [endpoint2]);
 
         SetupAuthentication(keyIndex, 79, bunny1, bunny2);
 
@@ -993,7 +993,7 @@ public class SystemTest
         var endpoint1 = CreateEndpointSettings(5002);
         var endpoint2 = CreateEndpointSettings(null);
         var endpoint3 = CreateEndpointSettings(5003);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint1, endpoint2, endpoint3 });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: [endpoint1, endpoint2, endpoint3]);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
         SetupAuthentication(keyIndex, bunny1, bunny2, bunny3);
@@ -1089,7 +1089,7 @@ public class SystemTest
         var queueName = $"test-relay-{Guid.NewGuid()}";
         var endpoint1 = CreateEndpointSettings(5002, queueName);
         var endpoint2 = CreateEndpointSettings(5003, queueName);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint1, endpoint2 });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: [endpoint1, endpoint2]);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
         SetupAuthentication(keyIndex, 800, bunny1, bunny2, bunny3);
@@ -1270,7 +1270,7 @@ public class SystemTest
         {
             using var hmac = new HMACSHA256(key);
             var hash = hmac.ComputeHash(message);
-            message = message.Concat(hash).ToArray();
+            message = [.. message, .. hash];
         }
 
         return message;

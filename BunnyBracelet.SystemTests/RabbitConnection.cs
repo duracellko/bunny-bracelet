@@ -75,7 +75,7 @@ internal sealed class RabbitConnection : IDisposable
         private readonly IModel model;
         private readonly string exchange;
         private readonly string? queueName;
-        private readonly ConcurrentQueue<RabbitMessage> queue = new ConcurrentQueue<RabbitMessage>();
+        private readonly ConcurrentQueue<RabbitMessage> queue = new();
 
         public MessageConsumer(IModel model, string exchange, string? queueName)
         {

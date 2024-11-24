@@ -37,7 +37,7 @@ public sealed class ExtendedTailStream : Stream
 
         if (tailSize == 0)
         {
-            Tail = currentTail = Array.Empty<byte>();
+            Tail = currentTail = [];
         }
         else
         {
@@ -233,7 +233,7 @@ public sealed class ExtendedTailStream : Stream
                 if (currentTail.Length > 0)
                 {
                     ArrayPool<byte>.Shared.Return(currentTail);
-                    currentTail = Array.Empty<byte>();
+                    currentTail = [];
                 }
 
                 stream.Dispose();

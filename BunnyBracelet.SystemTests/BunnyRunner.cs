@@ -26,10 +26,10 @@ internal sealed class BunnyRunner : IAsyncDisposable
     private const string DefaultInboundExchangePrefix = "test-inbound-";
     private const string DefaultOutboundExchangePrefix = "test-outbound-";
 
-    private static readonly Lazy<string> LazyBunnyBraceletPath = new Lazy<string>(GetBunnyBraceletPath);
+    private static readonly Lazy<string> LazyBunnyBraceletPath = new(GetBunnyBraceletPath);
 
-    private readonly StringBuilder output = new StringBuilder();
-    private readonly Lock outputLock = new Lock();
+    private readonly StringBuilder output = new();
+    private readonly Lock outputLock = new();
     private Process? process;
 
     private BunnyRunner(
@@ -116,7 +116,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         string? outboundExchange = null,
         IReadOnlyList<int>? endpointPorts = null)
     {
-        IReadOnlyList<string> endpoints = Array.Empty<string>();
+        IReadOnlyList<string> endpoints = [];
         if (endpointPorts is not null)
         {
             endpoints = endpointPorts.Select(GetUri).ToList();
@@ -140,7 +140,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         {
             Name = outboundExchange ?? DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
         };
-        IReadOnlyList<EndpointSettings> endpointSettings = Array.Empty<EndpointSettings>();
+        IReadOnlyList<EndpointSettings> endpointSettings = [];
         if (endpoints is not null)
         {
             endpointSettings = endpoints.Select(e => new EndpointSettings { Uri = e }).ToList();
@@ -166,7 +166,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
             Name = DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
         };
 
-        endpoints ??= Array.Empty<EndpointSettings>();
+        endpoints ??= [];
 
         return new BunnyRunner(port, rabbitMQUri, inboundExchange, outboundExchange, endpoints);
     }

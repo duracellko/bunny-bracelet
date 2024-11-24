@@ -6,38 +6,39 @@ namespace BunnyBracelet.Tests;
 [TestClass]
 public class MessageTest
 {
-    private static readonly DateTime TestTimestamp = new DateTime(2024, 8, 11, 23, 2, 32, 922, 129, DateTimeKind.Utc);
-    private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-    private static readonly DateTime Y2K38 = new DateTime(2038, 1, 19, 3, 14, 7, DateTimeKind.Unspecified);
+    private static readonly DateTime TestTimestamp = new(2024, 8, 11, 23, 2, 32, 922, 129, DateTimeKind.Utc);
+    private static readonly DateTime UnixEpoch = new(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime Y2K38 = new(2038, 1, 19, 3, 14, 7, DateTimeKind.Unspecified);
 
     private static readonly byte[] TestBody = Guid.NewGuid().ToByteArray();
     private static readonly BasicPropertiesMock TestBasicProperties = CreateBasicProperties();
 
-    public static IEnumerable<object?[]> EqualsTestData { get; } = new object?[][]
-    {
-        new object?[] { null, null, default(DateTime) },
-        new object?[] { null, null, TestTimestamp },
-        new object?[] { new ReadOnlyMemory<byte>(null), new BasicPropertiesMock(), TestTimestamp },
-        new object?[] { new ReadOnlyMemory<byte>(Array.Empty<byte>()), CreateBasicProperties(), DateTime.SpecifyKind(TestTimestamp, DateTimeKind.Unspecified) },
-        new object?[] { new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 }), TestBasicProperties, UnixEpoch },
-        new object?[] { new ReadOnlyMemory<byte>(TestBody), null, Y2K38 },
-    };
+    public static IEnumerable<object?[]> EqualsTestData { get; } =
+    [
+        [null, null, default(DateTime)],
+        [null, null, TestTimestamp],
+        [new ReadOnlyMemory<byte>(null), new BasicPropertiesMock(), TestTimestamp],
+        [new ReadOnlyMemory<byte>([]), CreateBasicProperties(), DateTime.SpecifyKind(TestTimestamp, DateTimeKind.Unspecified)],
+        [new ReadOnlyMemory<byte>([1, 2, 3]), TestBasicProperties, UnixEpoch],
+        [new ReadOnlyMemory<byte>(TestBody), null, Y2K38],
+    ];
 
     [SuppressMessage("Performance", "CA1825:Avoid zero-length array allocations", Justification = "Test new array instance.")]
-    public static IEnumerable<object?[]> NonEqualsTestData { get; } = new object?[][]
-    {
-        new object?[] { null, null, default(DateTime), new ReadOnlyMemory<byte>(Array.Empty<byte>()), null, default(DateTime) },
-        new object?[] { new ReadOnlyMemory<byte>(new byte[0]), null, UnixEpoch, new ReadOnlyMemory<byte>(Array.Empty<byte>()), null, UnixEpoch },
-        new object?[] { new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 }), null, TestTimestamp, new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 }), null, TestTimestamp },
-        new object?[] { new ReadOnlyMemory<byte>(Guid.NewGuid().ToByteArray()), null, default(DateTime), new ReadOnlyMemory<byte>(Guid.NewGuid().ToByteArray()), null, default(DateTime) },
-        new object?[] { new ReadOnlyMemory<byte>(null), null, TestTimestamp, new ReadOnlyMemory<byte>(null), new BasicPropertiesMock(), TestTimestamp },
-        new object?[] { new ReadOnlyMemory<byte>(Array.Empty<byte>()), new BasicPropertiesMock(), Y2K38, new ReadOnlyMemory<byte>(Array.Empty<byte>()), new BasicPropertiesMock(), Y2K38 },
-        new object?[] { new ReadOnlyMemory<byte>(Array.Empty<byte>()), new BasicPropertiesMock(), UnixEpoch, new ReadOnlyMemory<byte>(Array.Empty<byte>()), CreateBasicProperties(), UnixEpoch },
-        new object?[] { new ReadOnlyMemory<byte>(new byte[] { 127 }), CreateBasicProperties(), TestTimestamp, new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 }), CreateBasicProperties(), TestTimestamp },
-        new object?[] { null, null, default(DateTime), null, null, TestTimestamp },
-        new object?[] { new ReadOnlyMemory<byte>(Array.Empty<byte>()), null, UnixEpoch, new ReadOnlyMemory<byte>(Array.Empty<byte>()), null, TestTimestamp },
-        new object?[] { new ReadOnlyMemory<byte>(TestBody), TestBasicProperties, TestTimestamp, new ReadOnlyMemory<byte>(TestBody), TestBasicProperties, Y2K38 }
-    };
+    [SuppressMessage("Style", "IDE0300:Simplify collection initialization", Justification = "Test new array instance.")]
+    public static IEnumerable<object?[]> NonEqualsTestData { get; } =
+    [
+        [null, null, default(DateTime), new ReadOnlyMemory<byte>([]), null, default(DateTime)],
+        [new ReadOnlyMemory<byte>(new byte[0]), null, UnixEpoch, new ReadOnlyMemory<byte>([]), null, UnixEpoch],
+        [new ReadOnlyMemory<byte>([1, 2, 3]), null, TestTimestamp, new ReadOnlyMemory<byte>([1, 2, 3]), null, TestTimestamp],
+        [new ReadOnlyMemory<byte>(Guid.NewGuid().ToByteArray()), null, default(DateTime), new ReadOnlyMemory<byte>(Guid.NewGuid().ToByteArray()), null, default(DateTime)],
+        [new ReadOnlyMemory<byte>(null), null, TestTimestamp, new ReadOnlyMemory<byte>(null), new BasicPropertiesMock(), TestTimestamp],
+        [new ReadOnlyMemory<byte>([]), new BasicPropertiesMock(), Y2K38, new ReadOnlyMemory<byte>([]), new BasicPropertiesMock(), Y2K38],
+        [new ReadOnlyMemory<byte>([]), new BasicPropertiesMock(), UnixEpoch, new ReadOnlyMemory<byte>([]), CreateBasicProperties(), UnixEpoch],
+        [new ReadOnlyMemory<byte>([127]), CreateBasicProperties(), TestTimestamp, new ReadOnlyMemory<byte>([1, 2, 3]), CreateBasicProperties(), TestTimestamp],
+        [null, null, default(DateTime), null, null, TestTimestamp],
+        [new ReadOnlyMemory<byte>([]), null, UnixEpoch, new ReadOnlyMemory<byte>([]), null, TestTimestamp],
+        [new ReadOnlyMemory<byte>(TestBody), TestBasicProperties, TestTimestamp, new ReadOnlyMemory<byte>(TestBody), TestBasicProperties, Y2K38]
+    ];
 
     [TestMethod]
     public void DefaultValue_PropertiesAreNull()
@@ -64,7 +65,7 @@ public class MessageTest
     [TestMethod]
     public void Constructor_InstancesAsValues_PropertiesAreSet()
     {
-        var body = new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 });
+        var body = new ReadOnlyMemory<byte>([1, 2, 3]);
         var properties = new BasicPropertiesMock();
         var timestamp = DateTime.UtcNow;
 
