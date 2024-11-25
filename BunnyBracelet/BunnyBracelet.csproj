@@ -10,6 +10,7 @@
     <ContainerFamily>bookworm-slim</ContainerFamily>
     <Title>$(Product)</Title>
     <Description>Bunny Bracelet program relays messages between multiple RabbitMQ instances over HTTP protocol.</Description>
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

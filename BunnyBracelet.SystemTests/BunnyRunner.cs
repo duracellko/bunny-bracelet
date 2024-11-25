@@ -18,9 +18,9 @@ namespace BunnyBracelet.SystemTests;
 internal sealed class BunnyRunner : IAsyncDisposable
 {
 #if DEBUG
-    private const string Configuration = "Debug";
+    private const string Configuration = "debug";
 #else
-    private const string Configuration = "Release";
+    private const string Configuration = "release";
 #endif
 
     private const string DefaultInboundExchangePrefix = "test-inbound-";
@@ -258,26 +258,26 @@ internal sealed class BunnyRunner : IAsyncDisposable
     {
         var testAssemblyPath = typeof(SystemTest).Assembly.Location;
         testAssemblyPath = Path.GetDirectoryName(testAssemblyPath);
-        var path = Path.Combine(testAssemblyPath!, "..", "..", "..", "..", "BunnyBracelet", "bin", Configuration, "net8.0");
+        var path = Path.Combine(testAssemblyPath!, "..", "..", "..", "publish", "BunnyBracelet");
         path = Path.GetFullPath(path);
 
         var filename = "BunnyBracelet";
-        var runtimeId = "linux-x64";
+        var pivotBase = Configuration + "_net9.0";
+        var pivot = pivotBase + "_linux-x64";
         if (OperatingSystem.IsWindows())
         {
             filename += ".exe";
-            runtimeId = "win-x64";
+            pivot = pivotBase + "_win-x64";
         }
 
         // Run AOT published version, if it is found.
-        var nativePath = Path.Combine(path, runtimeId, "publish");
-        var result = Path.Combine(nativePath, filename);
+        var result = Path.Combine(path, pivot, filename);
         if (File.Exists(result))
         {
             return result;
         }
 
-        return Path.Combine(path, filename);
+        return Path.Combine(path, pivotBase, filename);
     }
 
     private static void SetEndpointEnvironment(IDictionary<string, string?> environment, EndpointSettings endpointSettings, int index)
