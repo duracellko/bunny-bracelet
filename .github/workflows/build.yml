@@ -72,7 +72,7 @@ jobs:
         Write-Host "Preparing artifacts in $($staging.FullName)"
 
         $license = Get-Item -Path 'LICENSE.txt'
-        $exclude = @('appsettings.Development.json', 'web.config')
+        $exclude = @('appsettings.Development.json', 'web.config', 'BunnyBracelet.xml')
 
         $publishBaseDirectory = 'artifacts/publish/BunnyBracelet'
         if (Test-Path -Path $publishBaseDirectory) {

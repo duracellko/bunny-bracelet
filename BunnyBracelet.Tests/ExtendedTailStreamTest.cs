@@ -1,9 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
 using ByteArray = byte[];
-#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
 using TailResult = (byte[] data, byte[] tail);
-#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
 
 namespace BunnyBracelet.Tests;
 

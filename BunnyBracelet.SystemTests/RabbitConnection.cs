@@ -2,9 +2,7 @@
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
 using RabbitMessage = (RabbitMQ.Client.IBasicProperties? properties, byte[] body);
-#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
 
 namespace BunnyBracelet.SystemTests;
 

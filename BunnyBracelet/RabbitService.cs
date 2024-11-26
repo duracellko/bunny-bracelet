@@ -44,7 +44,7 @@ public sealed class RabbitService : IDisposable
         }
     }
 
-    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Connection can be changed by different thread.")]
+    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Connection can be changed by a different thread.")]
     private IConnection Connection
     {
         get
@@ -67,7 +67,7 @@ public sealed class RabbitService : IDisposable
     /// is not thread-safe. Consumer of this object must ensure to not send
     /// 2 messages in parallel.
     /// </summary>
-    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Channel can be changed by different thread.")]
+    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Channel can be changed by a different thread.")]
     private IModel SendChannel
     {
         get

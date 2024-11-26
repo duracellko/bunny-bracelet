@@ -2,9 +2,7 @@
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
-#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
 using ContainerStatus = (string? id, bool isRunning, bool isConnected);
-#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
 
 namespace BunnyBracelet.SystemTests;
 

@@ -265,8 +265,8 @@ public sealed class ExtendedTailStream : Stream
 
             if (tailShiftSize == tailSize)
             {
-                source[..(bytesRead - tailSize)].CopyTo(buffer);
-                source = source[(bytesRead - tailSize)..];
+                source[..^tailSize].CopyTo(buffer);
+                source = source[^tailSize..];
             }
             else
             {
@@ -276,7 +276,7 @@ public sealed class ExtendedTailStream : Stream
                 }
             }
 
-            source.CopyTo(tail[(tailSize - tailShiftSize)..]);
+            source.CopyTo(tail[^tailShiftSize..]);
         }
         else
         {

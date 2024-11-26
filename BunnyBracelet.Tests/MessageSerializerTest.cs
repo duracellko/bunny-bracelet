@@ -234,7 +234,7 @@ public class MessageSerializerTest
         var messageBytes = new byte[serializedMessage.Length + 20];
         serializedMessage.CopyTo(messageBytes, 0);
         var tailBytes = GetRandomBytes(20);
-        tailBytes.CopyTo(messageBytes.AsMemory()[(messageBytes.Length - 20)..]);
+        tailBytes.CopyTo(messageBytes.AsMemory()[^20..]);
 
         var deserializedMessage = await DeserializeMessage(serializedMessage);
         MessageAssert.AreEqual(message, deserializedMessage);
@@ -259,7 +259,7 @@ public class MessageSerializerTest
         var serializedMessage = await SerializeMessage(message);
 
         var messageBytes = new byte[serializedMessage.Length - 1];
-        serializedMessage.AsSpan()[..(serializedMessage.Length - 1)].CopyTo(messageBytes);
+        serializedMessage.AsSpan()[..^1].CopyTo(messageBytes);
 
         await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
