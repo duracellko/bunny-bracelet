@@ -2,9 +2,7 @@
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
-#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
 using ContainerStatus = (string? id, bool isRunning, bool isConnected);
-#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
 
 namespace BunnyBracelet.SystemTests;
 
@@ -30,10 +28,10 @@ internal sealed class RabbitRunner : IDisposable
     private const string PortLabel = "BunnyBracelet-Port";
     private const string NetworkName = "bridge";
 
-    private static readonly SemaphoreSlim PullImageSemaphore = new SemaphoreSlim(1, 1);
-    private static readonly Dictionary<int, string> EnvironmentPasswords = new Dictionary<int, string>();
+    private static readonly SemaphoreSlim PullImageSemaphore = new(1, 1);
+    private static readonly Dictionary<int, string> EnvironmentPasswords = [];
 
-    private readonly Lazy<DockerClient> dockerClient = new Lazy<DockerClient>(CreateDockerClient);
+    private readonly Lazy<DockerClient> dockerClient = new(CreateDockerClient);
     private readonly string containerName;
     private string? containerId;
 
@@ -131,7 +129,7 @@ internal sealed class RabbitRunner : IDisposable
 
         foreach (var container in containers)
         {
-            bool isInactiveEnvironment = container.Labels.TryGetValue(EnvironmentLabel, out var label) &&
+            var isInactiveEnvironment = container.Labels.TryGetValue(EnvironmentLabel, out var label) &&
                 label != EnvironmentId;
             if (isInactiveEnvironment)
             {
@@ -174,7 +172,7 @@ internal sealed class RabbitRunner : IDisposable
         await dockerClient.Value.Containers.StopContainerAsync(containerId, new ContainerStopParameters());
     }
 
-    public RabbitConnection CreateConnection() => new RabbitConnection(Uri);
+    public RabbitConnection CreateConnection() => new(Uri);
 
     public void Dispose()
     {
@@ -198,8 +196,10 @@ internal sealed class RabbitRunner : IDisposable
         var result = new Dictionary<string, IDictionary<string, bool>>();
         foreach (var keyValuePair in filters)
         {
-            var value = new Dictionary<string, bool>();
-            value.Add(keyValuePair.Value, true);
+            var value = new Dictionary<string, bool>
+            {
+                { keyValuePair.Value, true }
+            };
             result.Add(keyValuePair.Key, value);
         }
 
@@ -290,7 +290,7 @@ internal sealed class RabbitRunner : IDisposable
                         RabbitMQPort.ToString(CultureInfo.InvariantCulture) + "/tcp",
                         new List<PortBinding>()
                         {
-                            new PortBinding
+                            new()
                             {
                                 HostIP = string.Empty,
                                 HostPort = Port.ToString(CultureInfo.InvariantCulture)
@@ -299,11 +299,11 @@ internal sealed class RabbitRunner : IDisposable
                     }
                 }
             },
-            Env = new List<string>
-            {
+            Env =
+            [
                 "RABBITMQ_DEFAULT_USER=" + Username,
                 "RABBITMQ_DEFAULT_PASS=" + Password
-            },
+            ],
             Labels = new Dictionary<string, string>()
             {
                 { EnvironmentLabel, EnvironmentId },
@@ -325,8 +325,8 @@ internal sealed class RabbitRunner : IDisposable
                 Since = startTime.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)
             };
             using var outputStream = await dockerClient.Value.Containers.GetContainerLogsAsync(containerId, false, parameters);
-            var containerOutput = await outputStream.ReadOutputToEndAsync(default);
-            if (containerOutput.stdout.Contains(searchText, StringComparison.Ordinal))
+            var (stdout, _) = await outputStream.ReadOutputToEndAsync(default);
+            if (stdout.Contains(searchText, StringComparison.Ordinal))
             {
                 return true;
             }

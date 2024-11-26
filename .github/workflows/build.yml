@@ -30,81 +30,104 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8.0
+    - name: Setup .NET 9.0
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
+        dotnet-version: 9.0.x
     - name: Restore
       run: dotnet restore
     - name: Build
       run: dotnet build --configuration Release -p:VersionRevision=${{ github.run_number }} --no-restore --verbosity normal
-    - name: Test (unit tests)
-      run: dotnet test ./BunnyBracelet.Tests/bin/Release/net8.0/BunnyBracelet.Tests.dll --verbosity normal --logger "trx;LogFileName=TestResults.trx"
-    - name: Publish
-      run: dotnet publish --configuration Release -p:VersionRevision=${{ github.run_number }} -p:PublishAot=false --verbosity normal
+    - name: Test (unit tests .NET 9)
+      run: dotnet test ./artifacts/bin/BunnyBracelet.Tests/release_net9.0/BunnyBracelet.Tests.dll --verbosity normal --logger "trx;LogFileName=TestResultsNET9.trx"
+    - name: Test (unit tests .NET 8)
+      run: dotnet test ./artifacts/bin/BunnyBracelet.Tests/release_net8.0/BunnyBracelet.Tests.dll --verbosity normal --logger "trx;LogFileName=TestResultsNET8.trx"
+    - name: Publish .NET 9
+      run: dotnet publish --configuration Release --framework net9.0 -p:VersionRevision=${{ github.run_number }} -p:PublishAot=false --verbosity normal
+    - name: Publish .NET 8
+      run: dotnet publish --configuration Release --framework net8.0 -p:VersionRevision=${{ github.run_number }} -p:PublishAot=false --verbosity normal
     - name: Publish AOT
-      run: dotnet publish --configuration Release -p:VersionRevision=${{ github.run_number }} --verbosity normal
+      run: |
+        $runtime = 'linux-x64'
+        if ($IsWindows) {
+          $runtime = 'win-x64'
+        }
+
+        dotnet publish --configuration Release --framework net9.0 --runtime $runtime -p:VersionRevision=${{ github.run_number }} --verbosity normal
     - name: Test (system tests)
-      run: dotnet test ./BunnyBracelet.SystemTests/bin/Release/net8.0/BunnyBracelet.SystemTests.dll --verbosity normal --logger "trx;LogFileName=SystemTestResults.trx"
+      run: dotnet test ./artifacts/bin/BunnyBracelet.SystemTests/release/BunnyBracelet.SystemTests.dll --verbosity normal --logger "trx;LogFileName=SystemTestResults.trx"
       if: ${{ runner.os == 'Linux' }}
     - name: Publish container
-      run: dotnet publish /t:PublishContainer --configuration Release -p:VersionRevision=${{ github.run_number }} -p:ContainerArchiveOutputPath=../artifacts/bunny-bracelet-container.tar.gz --verbosity normal
+      run: dotnet publish /t:PublishContainer --configuration Release --framework net9.0 --runtime linux-x64 -p:VersionRevision=${{ github.run_number }} -p:ContainerArchiveOutputPath=../artifacts/staging/bunny-bracelet-container.tar.gz --verbosity normal
       if: ${{ runner.os == 'Linux' }}
     - name: Create artifacts
       run: |
-        $artifacts = 'artifacts'
-        if (Test-Path -Path $artifacts) {
-          $artifacts = Get-Item -Path $artifacts
+        $staging = 'artifacts/staging'
+        if (Test-Path -Path $staging) {
+          $staging = Get-Item -Path $staging
         } else {
-          $artifacts = New-Item -Path $artifacts -ItemType Directory
+          $staging = New-Item -Path $staging -ItemType Directory
         }
 
-        Write-Host "Preparing artifacts in $($artifacts.FullName)"
+        Write-Host "Preparing artifacts in $($staging.FullName)"
 
         $license = Get-Item -Path 'LICENSE.txt'
-        $exclude = @('appsettings.Development.json', 'web.config')
+        $exclude = @('appsettings.Development.json', 'web.config', 'BunnyBracelet.xml')
 
-        $buildDirectory = 'BunnyBracelet/bin/Release/net8.0'
-        if (Test-Path -Path $buildDirectory) {
-          $buildDirectory = Get-Item -Path $buildDirectory
+        $publishBaseDirectory = 'artifacts/publish/BunnyBracelet'
+        if (Test-Path -Path $publishBaseDirectory) {
+          $publishBaseDirectory = Get-Item -Path $publishBaseDirectory
 
-          # Create BunnyBracelet .NET runtime artifact
-          $publishDirectory = Join-Path -Path $buildDirectory.FullName -ChildPath 'publish'
+          # Create BunnyBracelet .NET 9.0 runtime artifact
+          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net9.0'
           if (Test-Path -Path $publishDirectory) {
-            $artifactDirectory = Join-Path -Path $artifacts.FullName -ChildPath 'BunnyBracelet'
-            $artifactDirectory = New-Item -Path $artifactDirectory -ItemType Directory
+            $stagingDirectory = Join-Path -Path $staging.FullName -ChildPath 'BunnyBracelet-net9'
+            $stagingDirectory = New-Item -Path $stagingDirectory -ItemType Directory
 
-            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($artifactDirectory.FullName)"
+            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($stagingDirectory.FullName)"
 
-            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $artifactDirectory.FullName -Recurse
-            $license | Copy-Item -Destination $artifactDirectory.FullName
-            Get-ChildItem -Path $artifactDirectory.FullName -Recurse
+            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $stagingDirectory.FullName -Recurse
+            $license | Copy-Item -Destination $stagingDirectory.FullName
+            Get-ChildItem -Path $stagingDirectory.FullName -Recurse
+          }
+
+          # Create BunnyBracelet .NET 8.0 runtime artifact
+          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net8.0'
+          if (Test-Path -Path $publishDirectory) {
+            $stagingDirectory = Join-Path -Path $staging.FullName -ChildPath 'BunnyBracelet-net8'
+            $stagingDirectory = New-Item -Path $stagingDirectory -ItemType Directory
+
+            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($stagingDirectory.FullName)"
+
+            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $stagingDirectory.FullName -Recurse
+            $license | Copy-Item -Destination $stagingDirectory.FullName
+            Get-ChildItem -Path $stagingDirectory.FullName -Recurse
           }
 
           # Create BunnyBracelet Linux x64 artifact
-          $publishDirectory = Join-Path -Path $buildDirectory.FullName -ChildPath 'linux-x64/publish'
+          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net9.0_linux-x64'
           if (Test-Path -Path $publishDirectory) {
-            $artifactDirectory = Join-Path -Path $artifacts.FullName -ChildPath 'BunnyBracelet-linux-x64'
-            $artifactDirectory = New-Item -Path $artifactDirectory -ItemType Directory
+            $stagingDirectory = Join-Path -Path $staging.FullName -ChildPath 'BunnyBracelet-linux-x64'
+            $stagingDirectory = New-Item -Path $stagingDirectory -ItemType Directory
 
-            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($artifactDirectory.FullName)"
+            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($stagingDirectory.FullName)"
 
-            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $artifactDirectory.FullName -Recurse
-            $license | Copy-Item -Destination $artifactDirectory.FullName
-            Get-ChildItem -Path $artifactDirectory.FullName -Recurse
+            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $stagingDirectory.FullName -Recurse
+            $license | Copy-Item -Destination $stagingDirectory.FullName
+            Get-ChildItem -Path $stagingDirectory.FullName -Recurse
           }
 
           # Create BunnyBracelet Windows x64 artifact
-          $publishDirectory = Join-Path -Path $buildDirectory.FullName -ChildPath 'win-x64/publish'
+          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net9.0_win-x64'
           if (Test-Path -Path $publishDirectory) {
-            $artifactDirectory = Join-Path -Path $artifacts.FullName -ChildPath 'BunnyBracelet-win-x64'
-            $artifactDirectory = New-Item -Path $artifactDirectory -ItemType Directory
+            $stagingDirectory = Join-Path -Path $staging.FullName -ChildPath 'BunnyBracelet-win-x64'
+            $stagingDirectory = New-Item -Path $stagingDirectory -ItemType Directory
 
-            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($artifactDirectory.FullName)"
+            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($stagingDirectory.FullName)"
 
-            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $artifactDirectory.FullName -Recurse
-            $license | Copy-Item -Destination $artifactDirectory.FullName
-            Get-ChildItem -Path $artifactDirectory.FullName -Recurse
+            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $stagingDirectory.FullName -Recurse
+            $license | Copy-Item -Destination $stagingDirectory.FullName
+            Get-ChildItem -Path $stagingDirectory.FullName -Recurse
           }
         }
     - name: Publish tests
@@ -113,29 +136,35 @@ jobs:
         name: TestResults-${{ runner.os }}
         path: TestResults/*.trx
       if: ${{ !cancelled() }}
-    - name: Publish BunnyBracelet
+    - name: Publish BunnyBracelet-net9
       uses: actions/upload-artifact@v4
       with:
-        name: BunnyBracelet
-        path: artifacts/BunnyBracelet/
+        name: BunnyBracelet-net9
+        path: artifacts/staging/BunnyBracelet-net9/
+      if: ${{ runner.os == 'Linux' }}
+    - name: Publish BunnyBracelet-net8
+      uses: actions/upload-artifact@v4
+      with:
+        name: BunnyBracelet-net8
+        path: artifacts/staging/BunnyBracelet-net8/
       if: ${{ runner.os == 'Linux' }}
     - name: Publish BunnyBracelet-linux-x64
       uses: actions/upload-artifact@v4
       with:
         name: BunnyBracelet-linux-x64
-        path: artifacts/BunnyBracelet-linux-x64/
+        path: artifacts/staging/BunnyBracelet-linux-x64/
       if: ${{ runner.os == 'Linux' }}
     - name: Publish BunnyBracelet-win-x64
       uses: actions/upload-artifact@v4
       with:
         name: BunnyBracelet-win-x64
-        path: artifacts/BunnyBracelet-win-x64/
+        path: artifacts/staging/BunnyBracelet-win-x64/
       if: ${{ runner.os == 'Windows' }}
     - name: Publish BunnyBracelet (container)
       uses: actions/upload-artifact@v4
       with:
         name: bunny-bracelet-container
-        path: artifacts/bunny-bracelet-container.tar.gz
+        path: artifacts/staging/bunny-bracelet-container.tar.gz
         compression-level: 0
       if: ${{ runner.os == 'Linux' }}
 
@@ -157,7 +186,8 @@ jobs:
       uses: actions/download-artifact@v4
     - name: Create release artifacts
       run: |
-        Compress-Archive -Path './BunnyBracelet/*' -DestinationPath './BunnyBracelet.zip'
+        Compress-Archive -Path './BunnyBracelet-net9/*' -DestinationPath './BunnyBracelet-net9.zip'
+        Compress-Archive -Path './BunnyBracelet-net8/*' -DestinationPath './BunnyBracelet-net8.zip'
         Compress-Archive -Path './BunnyBracelet-linux-x64/*' -DestinationPath './BunnyBracelet-linux-x64.zip'
         Compress-Archive -Path './BunnyBracelet-win-x64/*' -DestinationPath './BunnyBracelet-win-x64.zip'
     - name: Get Release version
@@ -188,7 +218,7 @@ jobs:
       with:
         name: ${{ steps.get_release_version.outputs.release_name }}
         draft: true
-        artifacts: "BunnyBracelet.zip,BunnyBracelet-linux-x64.zip,BunnyBracelet-win-x64.zip"
+        artifacts: "BunnyBracelet-net9.zip,BunnyBracelet-net8.zip,BunnyBracelet-linux-x64.zip,BunnyBracelet-win-x64.zip"
         bodyFile: ReleaseBody.md
         tag: ${{ github.ref_type == 'tag' && github.ref_name || steps.get_release_version.outputs.release_tag }}
     - name: Docker login

@@ -16,7 +16,11 @@ public sealed class RabbitService : IDisposable
     private readonly ILogger<RabbitService> logger;
 
     // Lazy<T> cannot be used, because it caches exception.
-    private readonly object connectionLock = new object();
+#if NET9_0_OR_GREATER
+    private readonly Lock connectionLock = new();
+#else
+    private readonly object connectionLock = new();
+#endif
     private IConnection? connectionStore;
     private IModel? sendChannelStore;
     private bool disposed;
@@ -35,15 +39,12 @@ public sealed class RabbitService : IDisposable
         get
         {
             var connection = connectionStore;
-            if (connection is null)
-            {
-                connection = Volatile.Read(ref connectionStore);
-            }
-
+            connection ??= Volatile.Read(ref connectionStore);
             return connection is not null && connection.IsOpen;
         }
     }
 
+    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Connection can be changed by a different thread.")]
     private IConnection Connection
     {
         get
@@ -52,10 +53,7 @@ public sealed class RabbitService : IDisposable
             {
                 lock (connectionLock)
                 {
-                    if (connectionStore is null)
-                    {
-                        connectionStore = CreateConnection();
-                    }
+                    connectionStore ??= CreateConnection();
                 }
             }
 
@@ -69,6 +67,7 @@ public sealed class RabbitService : IDisposable
     /// is not thread-safe. Consumer of this object must ensure to not send
     /// 2 messages in parallel.
     /// </summary>
+    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Channel can be changed by a different thread.")]
     private IModel SendChannel
     {
         get
@@ -83,10 +82,7 @@ public sealed class RabbitService : IDisposable
                 // required by connectionStore.
                 lock (connectionLock)
                 {
-                    if (sendChannelStore is null)
-                    {
-                        sendChannelStore = CreateSendChannel(connection);
-                    }
+                    sendChannelStore ??= CreateSendChannel(connection);
                 }
             }
 
@@ -178,16 +174,15 @@ public sealed class RabbitService : IDisposable
             }
 
             var sendChannel = sendChannelStore;
-            if (sendChannel is not null)
-            {
-                // No need to close the channel. All channels are closed with connection.
-                sendChannel.Dispose();
-            }
+
+            // No need to close the channel. All channels are closed with connection.
+            sendChannel?.Dispose();
 
             disposed = true;
         }
     }
 
+    [SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "Throwing exception should not be simplified.")]
     private IConnection CreateConnection()
     {
         ObjectDisposedException.ThrowIf(disposing, this);

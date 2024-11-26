@@ -1,9 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
 using ByteArray = byte[];
-#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
 using TailResult = (byte[] data, byte[] tail);
-#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
 
 namespace BunnyBracelet.Tests;
 
@@ -11,80 +9,80 @@ namespace BunnyBracelet.Tests;
 [SuppressMessage("Performance", "CA1835:Prefer the 'Memory'-based overloads for 'ReadAsync' and 'WriteAsync'", Justification = "Basic byte-array function is tested.")]
 public class ExtendedTailStreamTest
 {
-    private static readonly Lazy<Random> Random = new Lazy<Random>(() => new Random());
+    private static readonly Lazy<Random> Random = new(() => new Random());
 
-    public static IEnumerable<object[]> ReadEmptyDataTestData { get; } = new object[][]
-    {
-        new object[] { 0 },
-        new object[] { 10 },
-        new object[] { 1000 }
-    };
+    public static IEnumerable<object[]> ReadEmptyDataTestData { get; } =
+    [
+        [0],
+        [10],
+        [1000]
+    ];
 
-    public static IEnumerable<object[]> ReadTailIsShorterThanDataTestData { get; } = new object[][]
-    {
-        new object[] { 120, 0 },
-        new object[] { 1, 0 },
-        new object[] { 5000, 0 },
-        new object[] { 1, 1 },
-        new object[] { 120, 120 },
-        new object[] { 5000, 5000 },
-        new object[] { 120, 24 },
-        new object[] { 120, 4 },
-        new object[] { 5000, 120 },
-        new object[] { 9999, 5001 }
-    };
+    public static IEnumerable<object[]> ReadTailIsShorterThanDataTestData { get; } =
+    [
+        [120, 0],
+        [1, 0],
+        [5000, 0],
+        [1, 1],
+        [120, 120],
+        [5000, 5000],
+        [120, 24],
+        [120, 4],
+        [5000, 120],
+        [9999, 5001]
+    ];
 
-    public static IEnumerable<object[]> ReadTailIsLongerThanDataTestData { get; } = new object[][]
-    {
-        new object[] { 120, 121 },
-        new object[] { 1, 2 },
-        new object[] { 5000, 10000 },
-        new object[] { 1, 120 },
-        new object[] { 120, 4000 },
-        new object[] { 5000, 5432 },
-        new object[] { 9999, 10000 }
-    };
+    public static IEnumerable<object[]> ReadTailIsLongerThanDataTestData { get; } =
+    [
+        [120, 121],
+        [1, 2],
+        [5000, 10000],
+        [1, 120],
+        [120, 4000],
+        [5000, 5432],
+        [9999, 10000]
+    ];
 
-    public static IEnumerable<object[]> ReadReplaceDataTestData { get; } = new object[][]
-    {
-        new object[] { 120, 0 },
-        new object[] { 1, 0 },
-        new object[] { 5000, 0 },
-        new object[] { 1, 1 },
-        new object[] { 120, 120 },
-        new object[] { 5000, 5000 },
-        new object[] { 120, 24 },
-        new object[] { 5000, 120 },
-        new object[] { 9999, 5001 }
-    };
+    public static IEnumerable<object[]> ReadReplaceDataTestData { get; } =
+    [
+        [120, 0],
+        [1, 0],
+        [5000, 0],
+        [1, 1],
+        [120, 120],
+        [5000, 5000],
+        [120, 24],
+        [5000, 120],
+        [9999, 5001]
+    ];
 
-    public static IEnumerable<object[]> ReadTailSizeAndReplaceDataTestData { get; } = new object[][]
-    {
-        new object[] { 1, 1, 0 },
-        new object[] { 1, 1, 1 },
-        new object[] { 120, 120, 120 },
-        new object[] { 5000, 5000, 5000 },
-        new object[] { 120, 32, 0 },
-        new object[] { 120, 32, 20 },
-        new object[] { 120, 120, 32 },
-        new object[] { 4321, 21, 120 },
-        new object[] { 4321, 20, 121 },
-        new object[] { 5000, 5000, 1 },
-        new object[] { 5000, 1, 5000 },
-        new object[] { 5000, 100, 120 },
-        new object[] { 9999, 5001, 4321 }
-    };
+    public static IEnumerable<object[]> ReadTailSizeAndReplaceDataTestData { get; } =
+    [
+        [1, 1, 0],
+        [1, 1, 1],
+        [120, 120, 120],
+        [5000, 5000, 5000],
+        [120, 32, 0],
+        [120, 32, 20],
+        [120, 120, 32],
+        [4321, 21, 120],
+        [4321, 20, 121],
+        [5000, 5000, 1],
+        [5000, 1, 5000],
+        [5000, 100, 120],
+        [9999, 5001, 4321]
+    ];
 
-    public static IEnumerable<object[]> ReadIndexOrCountIsInvalidTestData { get; } = new object[][]
-    {
-        new object[] { -1, 10 },
-        new object[] { 0, 0 },
-        new object[] { 1, -1 },
-        new object[] { 0, 51 },
-        new object[] { 50, 50 },
-        new object[] { 25, 26 },
-        new object[] { 50, 1 }
-    };
+    public static IEnumerable<object[]> ReadIndexOrCountIsInvalidTestData { get; } =
+    [
+        [-1, 10],
+        [0, 0],
+        [1, -1],
+        [0, 51],
+        [50, 50],
+        [25, 26],
+        [50, 1]
+    ];
 
     [TestMethod]
     public void Constructor_StreamIsNull_ArgumentNullException()
@@ -104,11 +102,11 @@ public class ExtendedTailStreamTest
     [DynamicData(nameof(ReadEmptyDataTestData))]
     public async Task ReadAsync_EmptyData_ReadsNoData(int tailSize)
     {
-        var result = await ExtendTailAsync(Array.Empty<byte>(), tailSize);
+        var (data, tail) = await ExtendTailAsync([], tailSize);
 
-        Assert.AreEqual(0, result.data.Length);
-        Assert.AreEqual(tailSize, result.tail.Length);
-        AssertBytesAreZero(result.tail);
+        Assert.AreEqual(0, data.Length);
+        Assert.AreEqual(tailSize, tail.Length);
+        AssertBytesAreZero(tail);
     }
 
     [TestMethod]
@@ -169,6 +167,7 @@ public class ExtendedTailStreamTest
     }
 
     [TestMethod]
+    [SuppressMessage("Reliability", "CA2022:Avoid inexact read with 'Stream.Read'", Justification = "Testing ReadAsync method.")]
     public async Task ReadAsync_BufferIsNull_ArgumentNullException()
     {
         using var stream = new MemoryStream(120);
@@ -179,6 +178,7 @@ public class ExtendedTailStreamTest
 
     [TestMethod]
     [DynamicData(nameof(ReadIndexOrCountIsInvalidTestData))]
+    [SuppressMessage("Reliability", "CA2022:Avoid inexact read with 'Stream.Read'", Justification = "Testing ReadAsync method.")]
     public async Task ReadAsync_IndexOrCountIsInvalid_ArgumentOutOfRangeException(int index, int count)
     {
         using var stream = new MemoryStream(120);
@@ -192,11 +192,11 @@ public class ExtendedTailStreamTest
     [DynamicData(nameof(ReadEmptyDataTestData))]
     public void Read_EmptyData_ReadsNoData(int tailSize)
     {
-        var result = ExtendTail(Array.Empty<byte>(), tailSize);
+        var (data, tail) = ExtendTail([], tailSize);
 
-        Assert.AreEqual(0, result.data.Length);
-        Assert.AreEqual(tailSize, result.tail.Length);
-        AssertBytesAreZero(result.tail);
+        Assert.AreEqual(0, data.Length);
+        Assert.AreEqual(tailSize, tail.Length);
+        AssertBytesAreZero(tail);
     }
 
     [TestMethod]
@@ -262,7 +262,7 @@ public class ExtendedTailStreamTest
         using var stream = new MemoryStream(120);
         using var target = new ExtendedTailStream(stream, 0);
 
-        Assert.ThrowsExceptionAsync<ArgumentNullException>(async () => await target.ReadAsync(null!, 0, 10));
+        Assert.ThrowsException<ArgumentNullException>(() => target.Read(null!, 0, 10));
     }
 
     [TestMethod]
@@ -273,7 +273,7 @@ public class ExtendedTailStreamTest
         using var target = new ExtendedTailStream(stream, 0);
 
         var buffer = new byte[50];
-        Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(async () => await target.ReadAsync(buffer, index, count));
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => target.Read(buffer, index, count));
     }
 
     [TestMethod]
@@ -367,7 +367,7 @@ public class ExtendedTailStreamTest
 
     private static void AssertBytesAreZero(byte[] data, int index, int count)
     {
-        for (int i = 0; i < count; i++)
+        for (var i = 0; i < count; i++)
         {
             Assert.AreEqual(0, data[index + i]);
         }

@@ -87,7 +87,7 @@ internal static class MessageAssert
     {
         Assert.AreEqual(expected.Count, actual.Count, "Header '{0}' list" + nameof(expected.Count) + " is different.", key);
 
-        for (int i = 0; i < expected.Count; i++)
+        for (var i = 0; i < expected.Count; i++)
         {
             var expectedValue = expected[i];
             var actualValue = actual[i];

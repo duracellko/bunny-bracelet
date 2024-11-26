@@ -37,7 +37,7 @@ public sealed class ExtendedTailStream : Stream
 
         if (tailSize == 0)
         {
-            Tail = currentTail = Array.Empty<byte>();
+            Tail = currentTail = [];
         }
         else
         {
@@ -113,7 +113,7 @@ public sealed class ExtendedTailStream : Stream
                 return CopyReplaceBytes(buffer);
             }
 
-            return CopyBytesAndUpdateTail(sourceBufferSpan.Slice(0, bytesRead), buffer);
+            return CopyBytesAndUpdateTail(sourceBufferSpan[..bytesRead], buffer);
         }
         finally
         {
@@ -184,7 +184,7 @@ public sealed class ExtendedTailStream : Stream
                 return CopyReplaceBytes(buffer.Span);
             }
 
-            return CopyBytesAndUpdateTail(sourceBufferMemory.Span.Slice(0, bytesRead), buffer.Span);
+            return CopyBytesAndUpdateTail(sourceBufferMemory.Span[..bytesRead], buffer.Span);
         }
         finally
         {
@@ -233,7 +233,7 @@ public sealed class ExtendedTailStream : Stream
                 if (currentTail.Length > 0)
                 {
                     ArrayPool<byte>.Shared.Return(currentTail);
-                    currentTail = Array.Empty<byte>();
+                    currentTail = [];
                 }
 
                 stream.Dispose();
@@ -260,23 +260,23 @@ public sealed class ExtendedTailStream : Stream
             // and then replenish current tail from source.
             // Byte flow is following: buffer << currentTail << source
             var tailShiftSize = Math.Min(bytesRead, tailSize);
-            tail.Slice(0, tailShiftSize).CopyTo(buffer);
-            buffer = buffer.Slice(tailShiftSize);
+            tail[..tailShiftSize].CopyTo(buffer);
+            buffer = buffer[tailShiftSize..];
 
             if (tailShiftSize == tailSize)
             {
-                source.Slice(0, bytesRead - tailSize).CopyTo(buffer);
-                source = source.Slice(bytesRead - tailSize);
+                source[..^tailSize].CopyTo(buffer);
+                source = source[^tailSize..];
             }
             else
             {
-                for (int i = 0; i < tailSize - tailShiftSize; i++)
+                for (var i = 0; i < tailSize - tailShiftSize; i++)
                 {
                     tail[i] = tail[i + tailShiftSize];
                 }
             }
 
-            source.CopyTo(tail.Slice(tailSize - tailShiftSize));
+            source.CopyTo(tail[^tailShiftSize..]);
         }
         else
         {
@@ -294,8 +294,8 @@ public sealed class ExtendedTailStream : Stream
         }
 
         var length = Math.Min(buffer.Length, replaceTail.Length);
-        replaceTail.Span.Slice(0, length).CopyTo(buffer);
-        replaceTail = replaceTail.Slice(length);
+        replaceTail.Span[..length].CopyTo(buffer);
+        replaceTail = replaceTail[length..];
         return length;
     }
 

@@ -8,7 +8,7 @@ namespace BunnyBracelet;
 /// custom headers, binary content (<see cref="Body"/>), and the timestamp
 /// of relaying of the message.
 /// </summary>
-public struct Message : IEquatable<Message>
+public readonly struct Message : IEquatable<Message>
 {
     public Message(ReadOnlyMemory<byte> body, IBasicProperties? properties, DateTime timestamp)
     {

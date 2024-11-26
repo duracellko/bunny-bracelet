@@ -5,7 +5,7 @@
 /// </summary>
 public class RabbitOptions
 {
-    private static readonly Uri DefaultRabbitMQUri = new Uri("ampq://localhost/");
+    private static readonly Uri DefaultRabbitMQUri = new("ampq://localhost/");
 
     /// <summary>
     /// Gets or sets URI of the RabbitMQ service.

@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -10,9 +11,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using RabbitMQ.Client;
 
 using ByteArray = byte[];
-#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
 using RabbitMessage = (RabbitMQ.Client.IBasicProperties? properties, byte[] body);
-#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
 
 namespace BunnyBracelet.SystemTests;
 
@@ -22,9 +21,10 @@ public class SystemTest
 {
     private const string OutputSeparator = "----------";
 
-    private static readonly Lazy<Random> Random = new Lazy<Random>(() => new Random());
+    private static readonly Lazy<Random> Random = new(() => new Random());
 
     [ClassInitialize]
+    [SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "Required by MS Test framework.")]
     public static void Initialize(TestContext context)
     {
         RabbitRunner.Reset();
@@ -109,7 +109,7 @@ public class SystemTest
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
         using var rabbit3 = new RabbitRunner(5675);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPorts: new[] { 5002, 5003 });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpointPorts: [5002, 5003]);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
         SetupAuthentication(keyIndex, 32, bunny1, bunny2, bunny3);
@@ -153,6 +153,7 @@ public class SystemTest
     [TestMethod]
     [DataRow(0)]
     [DataRow(1)]
+    [SuppressMessage("Style", "IDE0042:Deconstruct variable declaration", Justification = "Prefer no deconstruction in foreach statement.")]
     public async Task RelayMessagesFrom2RabbitMQInstances(int keyIndex)
     {
         using var rabbit1 = new RabbitRunner(5673);
@@ -192,8 +193,8 @@ public class SystemTest
             foreach (var messageResult in messageResults)
             {
                 var messageId = GetMessageId(messageResult);
-                var message = messageDictionary[messageId];
-                CollectionAssert.AreEqual(message.body, messageResult.body);
+                var (_, body) = messageDictionary[messageId];
+                CollectionAssert.AreEqual(body, messageResult.body);
                 messageDictionary.Remove(messageId);
             }
 
@@ -218,7 +219,7 @@ public class SystemTest
         static List<RabbitMessage> CreateMessages(RabbitConnection connection, string prefix)
         {
             var result = new List<RabbitMessage>(1000);
-            for (int i = 0; i < 1000; i++)
+            for (var i = 0; i < 1000; i++)
             {
                 var properties = connection.CreateProperties();
                 properties.MessageId = prefix + i.ToString("00000", CultureInfo.InvariantCulture);
@@ -290,19 +291,21 @@ public class SystemTest
 
         static Dictionary<string, object> CreateHeaders()
         {
-            var headers = new Dictionary<string, object>();
-            headers.Add("test binary", Encoding.UTF8.GetBytes("My test binary value"));
-            headers.Add("test boolean", true);
-            headers.Add("test byte", (byte)22);
-            headers.Add("test int16", short.MinValue);
-            headers.Add("test int32", int.MinValue);
-            headers.Add("test int64", long.MinValue);
-            headers.Add("test uint16", ushort.MaxValue);
-            headers.Add("test uint32", uint.MaxValue);
-            headers.Add("test single", 123.456f);
-            headers.Add("test double", 987654e-56);
-            headers.Add("test decimal", 12345.6789m);
-            headers.Add("test timestamp", new AmqpTimestamp(DateTimeOffset.Now.ToUnixTimeSeconds()));
+            var headers = new Dictionary<string, object>
+            {
+                { "test binary", Encoding.UTF8.GetBytes("My test binary value") },
+                { "test boolean", true },
+                { "test byte", (byte)22 },
+                { "test int16", short.MinValue },
+                { "test int32", int.MinValue },
+                { "test int64", long.MinValue },
+                { "test uint16", ushort.MaxValue },
+                { "test uint32", uint.MaxValue },
+                { "test single", 123.456f },
+                { "test double", 987654e-56 },
+                { "test decimal", 12345.6789m },
+                { "test timestamp", new AmqpTimestamp(DateTimeOffset.Now.ToUnixTimeSeconds()) }
+            };
 
             var innerList = new List<object>
             {
@@ -364,7 +367,7 @@ public class SystemTest
             using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
-            for (int i = 0; i < 3; i++)
+            for (var i = 0; i < 3; i++)
             {
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
@@ -420,7 +423,7 @@ public class SystemTest
             QueueName = "large-msg-queue-" + Guid.NewGuid().ToString(),
             AutoDelete = false
         };
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: [endpoint]);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpointPort: 5001);
 
         await rabbit1.Cleanup();
@@ -469,12 +472,12 @@ public class SystemTest
         var inboundExchange1 = CreateExchangeSettings("durable-inbound");
         var outboundExchange1 = CreateExchangeSettings("durable-outbound");
         var endpoint1 = CreateEndpointSettings(5002);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange1, outboundExchange1, endpoints: new[] { endpoint1 });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, inboundExchange1, outboundExchange1, endpoints: [endpoint1]);
 
         var inboundExchange2 = CreateExchangeSettings("durable-inbound");
         var outboundExchange2 = CreateExchangeSettings("durable-outbound");
         var endpoint2 = CreateEndpointSettings(5001);
-        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, inboundExchange2, outboundExchange2, endpoints: new[] { endpoint2 });
+        await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, inboundExchange2, outboundExchange2, endpoints: [endpoint2]);
 
         SetupAuthentication(keyIndex, 79, bunny1, bunny2);
 
@@ -490,7 +493,7 @@ public class SystemTest
 
             using (var connection1 = rabbit1.CreateConnection())
             {
-                for (int i = 0; i < 3; i++)
+                for (var i = 0; i < 3; i++)
                 {
                     var properties = connection1.CreateProperties();
                     properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
@@ -536,12 +539,10 @@ public class SystemTest
                 await rabbit2.ConnectContainerToNetwork();
                 await rabbit2.StartContainer();
 
-                using (var connection2 = rabbit2.CreateConnection())
-                {
-                    var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
-                    await AssertMessageInQueue(queue2, messages[1], 2);
-                    await AssertMessageInQueue(queue2, messages[2], 3);
-                }
+                using var connection2 = rabbit2.CreateConnection();
+                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                await AssertMessageInQueue(queue2, messages[1], 2);
+                await AssertMessageInQueue(queue2, messages[2], 3);
             }
 
             await AssertHealthy(bunny1, bunny2);
@@ -555,7 +556,7 @@ public class SystemTest
         {
             return new ExchangeSettings
             {
-                Name = $"{prefix}-{Guid.NewGuid().ToString()}",
+                Name = $"{prefix}-{Guid.NewGuid()}",
                 Durable = true
             };
         }
@@ -565,7 +566,7 @@ public class SystemTest
             return new EndpointSettings
             {
                 Uri = BunnyRunner.GetUri(port),
-                QueueName = $"test-relay-{Guid.NewGuid().ToString()}",
+                QueueName = $"test-relay-{Guid.NewGuid()}",
                 Durable = true,
                 AutoDelete = false
             };
@@ -596,7 +597,7 @@ public class SystemTest
             using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
-            for (int i = 0; i < 3; i++)
+            for (var i = 0; i < 3; i++)
             {
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
@@ -683,7 +684,7 @@ public class SystemTest
             using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
-            for (int i = 0; i < 3; i++)
+            for (var i = 0; i < 3; i++)
             {
                 var properties = connection1.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
@@ -955,7 +956,7 @@ public class SystemTest
             httpClient.BaseAddress = new Uri(bunny.Uri);
 
             var message = GetAuthenticatedMessage(key);
-            message[message.Length - 1] ^= 1;
+            message[^1] ^= 1;
             if (invalidMessage)
             {
                 message[12] = 12;
@@ -990,7 +991,7 @@ public class SystemTest
         var endpoint1 = CreateEndpointSettings(5002);
         var endpoint2 = CreateEndpointSettings(null);
         var endpoint3 = CreateEndpointSettings(5003);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint1, endpoint2, endpoint3 });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: [endpoint1, endpoint2, endpoint3]);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
         SetupAuthentication(keyIndex, bunny1, bunny2, bunny3);
@@ -1042,7 +1043,7 @@ public class SystemTest
             return new EndpointSettings
             {
                 Uri = port.HasValue ? BunnyRunner.GetUri(port.Value) : string.Empty,
-                QueueName = $"test-relay-{Guid.NewGuid().ToString()}",
+                QueueName = $"test-relay-{Guid.NewGuid()}",
                 Durable = false,
                 AutoDelete = false
             };
@@ -1083,10 +1084,10 @@ public class SystemTest
         using var rabbit2 = new RabbitRunner(5674);
         using var rabbit3 = new RabbitRunner(5675);
 
-        var queueName = $"test-relay-{Guid.NewGuid().ToString()}";
+        var queueName = $"test-relay-{Guid.NewGuid()}";
         var endpoint1 = CreateEndpointSettings(5002, queueName);
         var endpoint2 = CreateEndpointSettings(5003, queueName);
-        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: new[] { endpoint1, endpoint2 });
+        await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: [endpoint1, endpoint2]);
         await using var bunny2 = BunnyRunner.Create(5002, rabbit2.Uri, endpoint: null);
         await using var bunny3 = BunnyRunner.Create(5003, rabbit3.Uri, endpoint: null);
         SetupAuthentication(keyIndex, 800, bunny1, bunny2, bunny3);
@@ -1114,10 +1115,10 @@ public class SystemTest
             properties1.MessageId = messageId;
             connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
 
-            var messageResult = await WaitForMessage(queue2, queue3);
-            Assert.IsNotNull(messageResult.properties, $"Message does not have basic properties.");
-            MessageAssert.ArePropertiesEqual(properties1, messageResult.properties);
-            MessageAssert.AreBodiesEqual(messageContent, messageResult.body);
+            var (propertiesResult, bodyResult) = await WaitForMessage(queue2, queue3);
+            Assert.IsNotNull(propertiesResult, $"Message does not have basic properties.");
+            MessageAssert.ArePropertiesEqual(properties1, propertiesResult);
+            MessageAssert.AreBodiesEqual(messageContent, bodyResult);
 
             await Task.Delay(100);
             Assert.AreEqual(0, queue2.Count);
@@ -1208,7 +1209,7 @@ public class SystemTest
     // Disclaimer: No bunnies get harmed by running this method or any of these tests.
     private static async Task PutBunniesDown(params BunnyRunner[] bunnies)
     {
-        for (int i = 0; i < bunnies.Length; i++)
+        for (var i = 0; i < bunnies.Length; i++)
         {
             var bunny = bunnies[i];
             await bunny.Stop();
@@ -1218,7 +1219,7 @@ public class SystemTest
             Trace.WriteLine(bunny.GetOutput());
         }
 
-        for (int i = 0; i < bunnies.Length; i++)
+        for (var i = 0; i < bunnies.Length; i++)
         {
             Assert.AreEqual(0, bunnies[i].ExitCode, $"Exit code - Bunny {i + 1}");
         }
@@ -1260,13 +1261,14 @@ public class SystemTest
         if (timestampDifference.HasValue)
         {
             timestamp = timestamp.Add(timestampDifference.Value);
+            BinaryPrimitives.WriteInt64LittleEndian(message.AsSpan(4, 8), timestamp.ToBinary());
         }
 
         if (key is not null)
         {
             using var hmac = new HMACSHA256(key);
             var hash = hmac.ComputeHash(message);
-            message = message.Concat(hash).ToArray();
+            message = [.. message, .. hash];
         }
 
         return message;
@@ -1297,10 +1299,10 @@ public class SystemTest
 
     private static async Task<List<RabbitMessage>> WaitForMessages(
         IProducerConsumerCollection<RabbitMessage> queue,
-        int count)
+        int count = 2000)
     {
         var result = new List<RabbitMessage>();
-        for (int i = 0; i < 2000; i++)
+        for (var i = 0; i < count; i++)
         {
             var messageResult = await WaitForMessage(queue);
             result.Add(messageResult);
@@ -1311,10 +1313,10 @@ public class SystemTest
 
     private static async Task AssertMessageInQueue(IProducerConsumerCollection<RabbitMessage> queue, RabbitMessage expectedMessage, int index)
     {
-        var messageResult = await WaitForMessage(queue);
-        Assert.IsNotNull(messageResult.properties, $"Message {index} does not have basic properties.");
-        MessageAssert.ArePropertiesEqual(expectedMessage.properties!, messageResult.properties);
-        MessageAssert.AreBodiesEqual(expectedMessage.body, messageResult.body);
+        var (properties, body) = await WaitForMessage(queue);
+        Assert.IsNotNull(properties, $"Message {index} does not have basic properties.");
+        MessageAssert.ArePropertiesEqual(expectedMessage.properties!, properties);
+        MessageAssert.AreBodiesEqual(expectedMessage.body, body);
     }
 
     private static async Task WaitForLogOutput(BunnyRunner bunny, string expectedOutput, TimeSpan? timeout = default)
@@ -1332,7 +1334,7 @@ public class SystemTest
 
     private static async Task AssertHealthy(params BunnyRunner[] bunnies)
     {
-        for (int i = 0; i < bunnies.Length; i++)
+        for (var i = 0; i < bunnies.Length; i++)
         {
             var bunny = bunnies[i];
             var healthStatus = await bunny.GetHealthStatus();
@@ -1342,7 +1344,7 @@ public class SystemTest
 
     private static async Task AssertUnhealthy(params BunnyRunner[] bunnies)
     {
-        for (int i = 0; i < bunnies.Length; i++)
+        for (var i = 0; i < bunnies.Length; i++)
         {
             var bunny = bunnies[i];
             var healthStatus = await bunny.GetHealthStatus();
@@ -1350,14 +1352,14 @@ public class SystemTest
         }
     }
 
-    private static void AssertCollectionIsOrdered<T>(IReadOnlyList<T> collection)
+    private static void AssertCollectionIsOrdered<T>(List<T> collection)
         where T : IComparable<T>
     {
         if (collection.Count > 1)
         {
             Assert.IsNotNull(collection[0]);
 
-            for (int i = 1; i < collection.Count; i++)
+            for (var i = 1; i < collection.Count; i++)
             {
                 Assert.IsNotNull(collection[i]);
                 Assert.IsTrue(collection[i - 1].CompareTo(collection[i]) < 0, "Unexpected order '{0}' > '{1}'.", collection[i - 1], collection[i]);

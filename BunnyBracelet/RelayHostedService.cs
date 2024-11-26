@@ -16,7 +16,7 @@ namespace BunnyBracelet;
 /// </summary>
 public class RelayHostedService : IHostedService
 {
-    private static readonly Uri MessageUri = new Uri("message", UriKind.Relative);
+    private static readonly Uri MessageUri = new("message", UriKind.Relative);
 
     private readonly RabbitService rabbitService;
     private readonly IHttpClientFactory httpClientFactory;
@@ -25,7 +25,7 @@ public class RelayHostedService : IHostedService
     private readonly IOptions<RelayOptions> options;
     private readonly IOptions<RabbitOptions> rabbitOptions;
     private readonly ILogger<RelayHostedService> logger;
-    private readonly List<IDisposable> consumers = new List<IDisposable>();
+    private readonly List<IDisposable> consumers = [];
 
     public RelayHostedService(
         RabbitService rabbitService,

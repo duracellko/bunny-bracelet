@@ -2,9 +2,7 @@
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
 using RabbitMessage = (RabbitMQ.Client.IBasicProperties? properties, byte[] body);
-#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
 
 namespace BunnyBracelet.SystemTests;
 
@@ -16,13 +14,13 @@ internal sealed class RabbitConnection : IDisposable
 {
     private readonly Lazy<IConnection> connection;
     private readonly Lazy<IModel> model;
-    private readonly List<MessageConsumer> messageConsumers = new List<MessageConsumer>();
+    private readonly List<MessageConsumer> messageConsumers = [];
 
     public RabbitConnection(string uri)
     {
         Uri = new Uri(uri);
         connection = new Lazy<IConnection>(CreateConnection);
-        model = new Lazy<IModel>(() => connection.Value.CreateModel());
+        model = new Lazy<IModel>(connection.Value.CreateModel);
     }
 
     public Uri Uri { get; }
@@ -75,7 +73,7 @@ internal sealed class RabbitConnection : IDisposable
         private readonly IModel model;
         private readonly string exchange;
         private readonly string? queueName;
-        private readonly ConcurrentQueue<RabbitMessage> queue = new ConcurrentQueue<RabbitMessage>();
+        private readonly ConcurrentQueue<RabbitMessage> queue = new();
 
         public MessageConsumer(IModel model, string exchange, string? queueName)
         {

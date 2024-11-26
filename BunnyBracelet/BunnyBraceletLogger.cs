@@ -313,8 +313,10 @@ internal static class BunnyBraceletLogger
     {
         if (uri.UserInfo.Contains(':'))
         {
-            var uriBuilder = new UriBuilder(uri);
-            uriBuilder.Password = null;
+            var uriBuilder = new UriBuilder(uri)
+            {
+                Password = null
+            };
             uri = uriBuilder.Uri;
         }
 

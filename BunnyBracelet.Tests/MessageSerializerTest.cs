@@ -8,11 +8,11 @@ namespace BunnyBracelet.Tests;
 [TestClass]
 public class MessageSerializerTest
 {
-    private static readonly DateTime TestTimestamp = new DateTime(2024, 8, 11, 23, 2, 32, 922, 129, DateTimeKind.Utc);
-    private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-    private static readonly DateTime Y2K38 = new DateTime(2038, 1, 19, 3, 14, 7, DateTimeKind.Unspecified);
+    private static readonly DateTime TestTimestamp = new(2024, 8, 11, 23, 2, 32, 922, 129, DateTimeKind.Utc);
+    private static readonly DateTime UnixEpoch = new(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime Y2K38 = new(2038, 1, 19, 3, 14, 7, DateTimeKind.Unspecified);
 
-    private static readonly Lazy<Random> Random = new Lazy<Random>(() => new Random());
+    private static readonly Lazy<Random> Random = new(() => new Random());
 
     [TestMethod]
     public async Task WriteAndRead_EmptyMessage()
@@ -160,21 +160,23 @@ public class MessageSerializerTest
     [TestMethod]
     public async Task WriteAndRead_HeaderContainsList()
     {
-        var headers = new Dictionary<string, object>();
-        headers.Add("test string", "My test value");
-        headers.Add("test binary", Encoding.UTF8.GetBytes("My test binary value"));
-        headers.Add("test boolean", true);
-        headers.Add("test byte", (byte)22);
-        headers.Add("test int16", short.MinValue);
-        headers.Add("test int32", int.MinValue);
-        headers.Add("test int64", long.MinValue);
-        headers.Add("test uint16", ushort.MaxValue);
-        headers.Add("test uint32", uint.MaxValue);
-        headers.Add("test uint64", ulong.MaxValue);
-        headers.Add("test single", 123.456f);
-        headers.Add("test double", 987654e-56);
-        headers.Add("test decimal", 123456789.0987654321m);
-        headers.Add("test timestamp", new AmqpTimestamp(DateTimeOffset.Now.ToUnixTimeSeconds()));
+        var headers = new Dictionary<string, object>
+        {
+            { "test string", "My test value" },
+            { "test binary", Encoding.UTF8.GetBytes("My test binary value") },
+            { "test boolean", true },
+            { "test byte", (byte)22 },
+            { "test int16", short.MinValue },
+            { "test int32", int.MinValue },
+            { "test int64", long.MinValue },
+            { "test uint16", ushort.MaxValue },
+            { "test uint32", uint.MaxValue },
+            { "test uint64", ulong.MaxValue },
+            { "test single", 123.456f },
+            { "test double", 987654e-56 },
+            { "test decimal", 123456789.0987654321m },
+            { "test timestamp", new AmqpTimestamp(DateTimeOffset.Now.ToUnixTimeSeconds()) }
+        };
 
         var innerList = new List<object>
         {
@@ -232,7 +234,7 @@ public class MessageSerializerTest
         var messageBytes = new byte[serializedMessage.Length + 20];
         serializedMessage.CopyTo(messageBytes, 0);
         var tailBytes = GetRandomBytes(20);
-        tailBytes.CopyTo(messageBytes.AsMemory().Slice(messageBytes.Length - 20));
+        tailBytes.CopyTo(messageBytes.AsMemory()[^20..]);
 
         var deserializedMessage = await DeserializeMessage(serializedMessage);
         MessageAssert.AreEqual(message, deserializedMessage);
@@ -245,7 +247,7 @@ public class MessageSerializerTest
         var serializedMessage = await SerializeMessage(message);
 
         var messageBytes = new byte[serializedMessage.Length - 1];
-        serializedMessage.AsSpan().Slice(1).CopyTo(messageBytes);
+        serializedMessage.AsSpan()[1..].CopyTo(messageBytes);
 
         await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
@@ -257,7 +259,7 @@ public class MessageSerializerTest
         var serializedMessage = await SerializeMessage(message);
 
         var messageBytes = new byte[serializedMessage.Length - 1];
-        serializedMessage.AsSpan().Slice(0, serializedMessage.Length - 1).CopyTo(messageBytes);
+        serializedMessage.AsSpan()[..^1].CopyTo(messageBytes);
 
         await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
@@ -301,7 +303,7 @@ public class MessageSerializerTest
         // 4 bytes = preamble, 8 bytes - timestamp, 1 byte - start properties
         // 1 bytes = property, 1 byte - MessageId property
         var newMessageIdSize = message.Body.Length * 2;
-        BinaryPrimitives.WriteInt32LittleEndian(messageBytes.AsSpan().Slice(15), newMessageIdSize);
+        BinaryPrimitives.WriteInt32LittleEndian(messageBytes.AsSpan()[15..], newMessageIdSize);
 
         await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
@@ -345,7 +347,7 @@ public class MessageSerializerTest
         var deserializedMessage = await DeserializeMessage(messageBytes);
 
         var messageIdBuilder = new StringBuilder(message.Properties!.MessageId);
-        messageIdBuilder[messageIdBuilder.Length - 1] = '\uFFFD';
+        messageIdBuilder[^1] = '\uFFFD';
         var expectedMessageId = messageIdBuilder.ToString();
         Assert.IsNotNull(deserializedMessage.Properties);
         Assert.AreEqual(expectedMessageId, deserializedMessage.Properties.MessageId);
@@ -388,8 +390,8 @@ public class MessageSerializerTest
         message1Bytes.CopyTo(messageBytes, 0);
 
         // Overwrite last byte (end of message) of message 1.
-        message2Bytes.AsMemory().Slice(12)
-            .CopyTo(messageBytes.AsMemory().Slice(message1Bytes.Length - 1));
+        message2Bytes.AsMemory()[12..]
+            .CopyTo(messageBytes.AsMemory()[(message1Bytes.Length - 1)..]);
 
         var deserializedMessage = await DeserializeMessage(messageBytes);
 
@@ -442,6 +444,7 @@ public class MessageSerializerTest
         return await messageSerializer.ReadMessage(stream, () => new BasicPropertiesMock());
     }
 
+    [SuppressMessage("Style", "IDE0047:Remove unnecessary parentheses", Justification = "Keep parentheses for modulo.")]
     private static Message CreateSampleMessage()
     {
         // Type: Test message (💎, 📜, ✂, 🦎, 🖖)
@@ -453,7 +456,7 @@ public class MessageSerializerTest
         };
 
         var body = new byte[4000];
-        for (int i = 0; i < body.Length; i++)
+        for (var i = 0; i < body.Length; i++)
         {
             body[i] = (byte)(((i + 1) * (i + 52)) % 256);
         }

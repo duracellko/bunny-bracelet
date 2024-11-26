@@ -26,7 +26,7 @@ namespace BunnyBracelet;
 public class MessageSerializer : IMessageSerializer
 {
     // RMQR = RabbitMQ Relay
-    private static readonly byte[] Preamble = new byte[] { 82, 77, 81, 82 };
+    private static readonly byte[] Preamble = [82, 77, 81, 82];
     private static readonly Encoding TextEncoding = Encoding.UTF8;
 
     public async ValueTask<Message> ReadMessage(Stream stream, Func<IBasicProperties> propertiesFactory)
@@ -236,41 +236,25 @@ public class MessageSerializer : IMessageSerializer
     private static async ValueTask<object> ReadHeaderValue(PipeReader reader)
     {
         var valueTypeCode = await ReadByte(reader);
-        switch (valueTypeCode)
+        return valueTypeCode switch
         {
-            case ValueTypeCodes.ByteArray:
-                return await ReadByteArray(reader);
-            case ValueTypeCodes.Boolean:
-                return await ReadBoolean(reader);
-            case ValueTypeCodes.Byte:
-                return await ReadByte(reader);
-            case ValueTypeCodes.Int16:
-                return await ReadInt16(reader);
-            case ValueTypeCodes.Int32:
-                return await ReadInt32(reader);
-            case ValueTypeCodes.Int64:
-                return await ReadInt64(reader);
-            case ValueTypeCodes.UInt16:
-                return await ReadUInt16(reader);
-            case ValueTypeCodes.UInt32:
-                return await ReadUInt32(reader);
-            case ValueTypeCodes.UInt64:
-                return await ReadUInt64(reader);
-            case ValueTypeCodes.Single:
-                return await ReadSingle(reader);
-            case ValueTypeCodes.Double:
-                return await ReadDouble(reader);
-            case ValueTypeCodes.Decimal:
-                return await ReadDecimal(reader);
-            case ValueTypeCodes.String:
-                return await ReadString(reader);
-            case ValueTypeCodes.Timestamp:
-                return await ReadTimestamp(reader);
-            case ValueTypeCodes.List:
-                return await ReadList(reader);
-            default:
-                throw new MessageException($"Unexpected header value type code {valueTypeCode}.");
-        }
+            ValueTypeCodes.ByteArray => await ReadByteArray(reader),
+            ValueTypeCodes.Boolean => await ReadBoolean(reader),
+            ValueTypeCodes.Byte => await ReadByte(reader),
+            ValueTypeCodes.Int16 => await ReadInt16(reader),
+            ValueTypeCodes.Int32 => await ReadInt32(reader),
+            ValueTypeCodes.Int64 => await ReadInt64(reader),
+            ValueTypeCodes.UInt16 => await ReadUInt16(reader),
+            ValueTypeCodes.UInt32 => await ReadUInt32(reader),
+            ValueTypeCodes.UInt64 => await ReadUInt64(reader),
+            ValueTypeCodes.Single => await ReadSingle(reader),
+            ValueTypeCodes.Double => await ReadDouble(reader),
+            ValueTypeCodes.Decimal => await ReadDecimal(reader),
+            ValueTypeCodes.String => await ReadString(reader),
+            ValueTypeCodes.Timestamp => await ReadTimestamp(reader),
+            ValueTypeCodes.List => await ReadList(reader),
+            _ => throw new MessageException($"Unexpected header value type code {valueTypeCode}."),
+        };
     }
 
     private static async ValueTask<string> ReadString(PipeReader reader)
@@ -477,7 +461,7 @@ public class MessageSerializer : IMessageSerializer
         var itemsCount = await ReadInt32(reader);
         var result = new List<object>(itemsCount);
 
-        for (int i = 0; i < itemsCount; i++)
+        for (var i = 0; i < itemsCount; i++)
         {
             result.Add(await ReadHeaderValue(reader));
         }
@@ -680,7 +664,7 @@ public class MessageSerializer : IMessageSerializer
         var buffer = writer.GetSpan(10);
         buffer[0] = Codes.Property;
         buffer[1] = code;
-        buffer = buffer.Slice(2);
+        buffer = buffer[2..];
         BinaryPrimitives.WriteInt64LittleEndian(buffer, value);
         writer.Advance(10);
     }
@@ -836,9 +820,9 @@ public class MessageSerializer : IMessageSerializer
         // 1 byte = code, 4 bytes body length
         var buffer = writer.GetMemory(5 + body.Length);
         buffer.Span[0] = Codes.Body;
-        buffer = buffer.Slice(1);
+        buffer = buffer[1..];
         BinaryPrimitives.WriteInt32LittleEndian(buffer.Span, body.Length);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         body.CopyTo(buffer);
         writer.Advance(5 + body.Length);
     }
@@ -927,11 +911,11 @@ public class MessageSerializer : IMessageSerializer
         decimal.GetBits(value, intBuffer);
 
         BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[0]);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[1]);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[2]);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         BinaryPrimitives.WriteInt32LittleEndian(buffer, intBuffer[3]);
 
         writer.Advance(16);
@@ -942,8 +926,8 @@ public class MessageSerializer : IMessageSerializer
         // 4 bytes per character is very conservative for UTF-8
         var buffer = writer.GetSpan(4 + (value.Length * 4));
 
-        var lengthBuffer = buffer.Slice(0, 4);
-        var bytesCount = TextEncoding.GetBytes(value, buffer.Slice(4));
+        var lengthBuffer = buffer[..4];
+        var bytesCount = TextEncoding.GetBytes(value, buffer[4..]);
         BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, bytesCount);
 
         writer.Advance(bytesCount + 4);
@@ -953,7 +937,7 @@ public class MessageSerializer : IMessageSerializer
     {
         var buffer = writer.GetSpan(4 + value.Length);
         BinaryPrimitives.WriteInt32LittleEndian(buffer, value.Length);
-        buffer = buffer.Slice(4);
+        buffer = buffer[4..];
         value.CopyTo(buffer);
         writer.Advance(4 + value.Length);
     }
@@ -1040,10 +1024,7 @@ public class MessageSerializer : IMessageSerializer
 
         public void CreateProperties()
         {
-            if (Properties is null)
-            {
-                Properties = propertiesFactory();
-            }
+            Properties ??= propertiesFactory();
         }
 
         public void AddHeader(string key, object value)

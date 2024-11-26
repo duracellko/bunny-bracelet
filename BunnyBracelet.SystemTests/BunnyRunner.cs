@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -17,18 +18,18 @@ namespace BunnyBracelet.SystemTests;
 internal sealed class BunnyRunner : IAsyncDisposable
 {
 #if DEBUG
-    private const string Configuration = "Debug";
+    private const string Configuration = "debug";
 #else
-    private const string Configuration = "Release";
+    private const string Configuration = "release";
 #endif
 
     private const string DefaultInboundExchangePrefix = "test-inbound-";
     private const string DefaultOutboundExchangePrefix = "test-outbound-";
 
-    private static readonly Lazy<string> LazyBunnyBraceletPath = new Lazy<string>(GetBunnyBraceletPath);
+    private static readonly Lazy<string> LazyBunnyBraceletPath = new(GetBunnyBraceletPath);
 
-    private readonly StringBuilder output = new StringBuilder();
-    private readonly object outputLock = new object();
+    private readonly StringBuilder output = new();
+    private readonly Lock outputLock = new();
     private Process? process;
 
     private BunnyRunner(
@@ -115,10 +116,10 @@ internal sealed class BunnyRunner : IAsyncDisposable
         string? outboundExchange = null,
         IReadOnlyList<int>? endpointPorts = null)
     {
-        IReadOnlyList<string> endpoints = Array.Empty<string>();
+        IReadOnlyList<string> endpoints = [];
         if (endpointPorts is not null)
         {
-            endpoints = endpointPorts.Select(p => GetUri(p)).ToList();
+            endpoints = endpointPorts.Select(GetUri).ToList();
         }
 
         return Create(port, rabbitMQUri, inboundExchange, outboundExchange, endpoints);
@@ -139,7 +140,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         {
             Name = outboundExchange ?? DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
         };
-        IReadOnlyList<EndpointSettings> endpointSettings = Array.Empty<EndpointSettings>();
+        IReadOnlyList<EndpointSettings> endpointSettings = [];
         if (endpoints is not null)
         {
             endpointSettings = endpoints.Select(e => new EndpointSettings { Uri = e }).ToList();
@@ -155,23 +156,17 @@ internal sealed class BunnyRunner : IAsyncDisposable
         ExchangeSettings? outboundExchange = null,
         IReadOnlyList<EndpointSettings>? endpoints = null)
     {
-        if (inboundExchange == null)
+        inboundExchange ??= new ExchangeSettings
         {
-            inboundExchange = new ExchangeSettings
-            {
-                Name = DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
-            };
-        }
+            Name = DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
+        };
 
-        if (outboundExchange == null)
+        outboundExchange ??= new ExchangeSettings
         {
-            outboundExchange = new ExchangeSettings
-            {
-                Name = DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
-            };
-        }
+            Name = DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
+        };
 
-        endpoints ??= Array.Empty<EndpointSettings>();
+        endpoints ??= [];
 
         return new BunnyRunner(port, rabbitMQUri, inboundExchange, outboundExchange, endpoints);
     }
@@ -235,6 +230,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         }
     }
 
+    [SuppressMessage("Style", "IDE0072:Add missing cases", Justification = "Other HTTP status codes are unexpected.")]
     public async Task<HealthStatus> GetHealthStatus()
     {
         using var httpClient = new HttpClient();
@@ -262,26 +258,26 @@ internal sealed class BunnyRunner : IAsyncDisposable
     {
         var testAssemblyPath = typeof(SystemTest).Assembly.Location;
         testAssemblyPath = Path.GetDirectoryName(testAssemblyPath);
-        var path = Path.Combine(testAssemblyPath!, "..", "..", "..", "..", "BunnyBracelet", "bin", Configuration, "net8.0");
+        var path = Path.Combine(testAssemblyPath!, "..", "..", "..", "publish", "BunnyBracelet");
         path = Path.GetFullPath(path);
 
         var filename = "BunnyBracelet";
-        var runtimeId = "linux-x64";
+        var pivotBase = Configuration + "_net9.0";
+        var pivot = pivotBase + "_linux-x64";
         if (OperatingSystem.IsWindows())
         {
             filename += ".exe";
-            runtimeId = "win-x64";
+            pivot = pivotBase + "_win-x64";
         }
 
         // Run AOT published version, if it is found.
-        var nativePath = Path.Combine(path, runtimeId, "publish");
-        var result = Path.Combine(nativePath, filename);
+        var result = Path.Combine(path, pivot, filename);
         if (File.Exists(result))
         {
             return result;
         }
 
-        return Path.Combine(path, filename);
+        return Path.Combine(path, pivotBase, filename);
     }
 
     private static void SetEndpointEnvironment(IDictionary<string, string?> environment, EndpointSettings endpointSettings, int index)
@@ -346,7 +342,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         SetInboundExchangeEnvironment(result.Environment);
         SetOutboundExchangeEnvironment(result.Environment);
 
-        for (int i = 0; i < Endpoints.Count; i++)
+        for (var i = 0; i < Endpoints.Count; i++)
         {
             SetEndpointEnvironment(result.Environment, Endpoints[i], i);
         }
