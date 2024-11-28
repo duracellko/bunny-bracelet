@@ -204,7 +204,7 @@ internal static class BunnyBraceletLogger
         LogReceivingInboundMessage(logger, size, traceIdentifier, null);
     }
 
-    public static void InboundMessageForwarded(this ILogger logger, IBasicProperties? properties, int size, string? traceIdentifier)
+    public static void InboundMessageForwarded(this ILogger logger, IReadOnlyBasicProperties? properties, int size, string? traceIdentifier)
     {
         LogInboundMessageForwarded(logger, properties?.MessageId, properties?.CorrelationId, size, traceIdentifier, null);
     }
@@ -214,7 +214,7 @@ internal static class BunnyBraceletLogger
         LogErrorReadingInboundMessage(logger, traceIdentifier, exception);
     }
 
-    public static void ErrorProcessingInboundMessage(this ILogger logger, Exception exception, IBasicProperties? properties, int? size, string? traceIdentifier)
+    public static void ErrorProcessingInboundMessage(this ILogger logger, Exception exception, IReadOnlyBasicProperties? properties, int? size, string? traceIdentifier)
     {
         LogErrorProcessingInboundMessage(logger, properties?.MessageId, properties?.CorrelationId, size, traceIdentifier, exception);
     }
@@ -254,17 +254,17 @@ internal static class BunnyBraceletLogger
         LogMessageAuthenticationCodeGenerated(logger, keyIndex, null);
     }
 
-    public static void RelayingMessage(this ILogger logger, Uri uri, string exchange, IBasicProperties? properties, int size)
+    public static void RelayingMessage(this ILogger logger, Uri uri, string exchange, IReadOnlyBasicProperties? properties, int size)
     {
         LogRelayingMessage(logger, properties?.MessageId, properties?.CorrelationId, size, exchange, uri, null);
     }
 
-    public static void MessageRelayed(this ILogger logger, Uri uri, string exchange, IBasicProperties? properties, int size)
+    public static void MessageRelayed(this ILogger logger, Uri uri, string exchange, IReadOnlyBasicProperties? properties, int size)
     {
         LogMessageRelayed(logger, properties?.MessageId, properties?.CorrelationId, size, exchange, uri, null);
     }
 
-    public static void ErrorRelayingMessage(this ILogger logger, Exception exception, Uri uri, string exchange, IBasicProperties? properties, int size, string? response)
+    public static void ErrorRelayingMessage(this ILogger logger, Exception exception, Uri uri, string exchange, IReadOnlyBasicProperties? properties, int size, string? response)
     {
         LogErrorRelayingMessage(logger, properties?.MessageId, properties?.CorrelationId, size, exchange, uri, response, exception);
     }
@@ -323,17 +323,17 @@ internal static class BunnyBraceletLogger
         LogConnectingToRabbitMQ(logger, uri, null);
     }
 
-    public static void PublishingMessage(this ILogger logger, string exchange, IBasicProperties? properties, int size)
+    public static void PublishingMessage(this ILogger logger, string exchange, IReadOnlyBasicProperties? properties, int size)
     {
         LogPublishingMessage(logger, exchange, properties?.MessageId, properties?.CorrelationId, properties?.Type, size, null);
     }
 
-    public static void MessagePublished(this ILogger logger, string exchange, IBasicProperties? properties, int size)
+    public static void MessagePublished(this ILogger logger, string exchange, IReadOnlyBasicProperties? properties, int size)
     {
         LogMessagePublished(logger, exchange, properties?.MessageId, properties?.CorrelationId, properties?.Type, size, null);
     }
 
-    public static void ErrorPublishingMessage(this ILogger logger, Exception exception, string exchange, IBasicProperties? properties, int size)
+    public static void ErrorPublishingMessage(this ILogger logger, Exception exception, string exchange, IReadOnlyBasicProperties? properties, int size)
     {
         LogErrorPublishingMessage(logger, exchange, properties?.MessageId, properties?.CorrelationId, properties?.Type, size, exception);
     }
@@ -358,27 +358,27 @@ internal static class BunnyBraceletLogger
         LogConsumerStopped(logger, consumerTag, exchange, queue, null);
     }
 
-    public static void ConsumingMessage(this ILogger logger, string exchange, string queue, string consumerTag, IBasicProperties? properties, int size)
+    public static void ConsumingMessage(this ILogger logger, string exchange, string queue, string consumerTag, IReadOnlyBasicProperties? properties, int size)
     {
         LogConsumingMessage(logger, consumerTag, exchange, queue, properties?.MessageId, properties?.CorrelationId, size, null);
     }
 
-    public static void MessageConsumed(this ILogger logger, string exchange, string queue, string consumerTag, IBasicProperties? properties, int size)
+    public static void MessageConsumed(this ILogger logger, string exchange, string queue, string consumerTag, IReadOnlyBasicProperties? properties, int size)
     {
         LogMessageConsumed(logger, consumerTag, exchange, queue, properties?.MessageId, properties?.CorrelationId, size, null);
     }
 
-    public static void MessageRejected(this ILogger logger, string exchange, string queue, string consumerTag, IBasicProperties? properties, int size)
+    public static void MessageRejected(this ILogger logger, string exchange, string queue, string consumerTag, IReadOnlyBasicProperties? properties, int size)
     {
         LogMessageRejected(logger, consumerTag, exchange, queue, properties?.MessageId, properties?.CorrelationId, size, null);
     }
 
-    public static void MessageRequeued(this ILogger logger, string exchange, string queue, string consumerTag, IBasicProperties? properties, int size)
+    public static void MessageRequeued(this ILogger logger, string exchange, string queue, string consumerTag, IReadOnlyBasicProperties? properties, int size)
     {
         LogMessageRequeued(logger, consumerTag, exchange, queue, properties?.MessageId, properties?.CorrelationId, size, null);
     }
 
-    public static void ErrorConsumingMessage(this ILogger logger, Exception exception, string exchange, string queue, string consumerTag, IBasicProperties? properties, int size)
+    public static void ErrorConsumingMessage(this ILogger logger, Exception exception, string exchange, string queue, string consumerTag, IReadOnlyBasicProperties? properties, int size)
     {
         LogErrorConsumingMessage(logger, consumerTag, exchange, queue, properties?.MessageId, properties?.CorrelationId, size, exception);
     }

@@ -24,7 +24,7 @@ public class MessageSerializerTest
     [TestMethod]
     public async Task WriteAndRead_DefaultProperties()
     {
-        var message = new Message(Array.Empty<byte>(), new BasicPropertiesMock(), UnixEpoch);
+        var message = new Message(Array.Empty<byte>(), new BasicProperties(), UnixEpoch);
         await TestMessageSerializationAndDeserialization(message);
     }
 
@@ -38,16 +38,16 @@ public class MessageSerializerTest
     [TestMethod]
     public async Task WriteAndRead_PropertiesAndBody()
     {
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
             AppId = "Test application",
             ClusterId = "Cluster tested",
             ContentEncoding = "Unicode",
             ContentType = "application/json",
             CorrelationId = Guid.NewGuid().ToString(),
-            DeliveryMode = 2,
+            DeliveryMode = DeliveryModes.Persistent,
             Expiration = "tomorrow",
-            Headers = new Dictionary<string, object>(),
+            Headers = new Dictionary<string, object?>(),
             MessageId = Guid.NewGuid().ToString(),
             Persistent = true,
             Priority = 129,
@@ -66,13 +66,13 @@ public class MessageSerializerTest
     public async Task WriteAndRead_Headers()
     {
         // My header: 💎, 📜, ✂
-        var headers = new Dictionary<string, object>()
+        var headers = new Dictionary<string, object?>()
         {
             { "Test header", Array.Empty<byte>() },
             { string.Empty, Guid.NewGuid().ToByteArray() },
             { "My header (\uD83D\uDC8E, \uD83D\uDCDC, \u2702)", Encoding.Unicode.GetBytes("My value") }
         };
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
             Headers = headers
         };
@@ -93,11 +93,11 @@ public class MessageSerializerTest
     [TestMethod]
     public async Task WriteAndRead_EmptyBody()
     {
-        var headers = new Dictionary<string, object>()
+        var headers = new Dictionary<string, object?>()
         {
             { "My header", Encoding.Unicode.GetBytes("My value") }
         };
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
             CorrelationId = Guid.NewGuid().ToString(),
             MessageId = Guid.NewGuid().ToString(),
@@ -113,12 +113,12 @@ public class MessageSerializerTest
     [TestMethod]
     public async Task WriteAndRead_EmptyStringHeaders()
     {
-        var headers = new Dictionary<string, object>()
+        var headers = new Dictionary<string, object?>()
         {
             { string.Empty, Encoding.Unicode.GetBytes("My value") },
             { "My header", Array.Empty<byte>() }
         };
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
             CorrelationId = string.Empty,
             MessageId = string.Empty,
@@ -133,9 +133,9 @@ public class MessageSerializerTest
     [TestMethod]
     public async Task WriteAndRead_ReplyToAddress()
     {
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
-            ReplyToAddress = new PublicationAddress(null, string.Empty, null),
+            ReplyToAddress = new PublicationAddress(ExchangeType.Topic, "myExchange", string.Empty),
         };
 
         var message = new Message(new byte[1000], properties, DateTime.UtcNow);
@@ -148,7 +148,7 @@ public class MessageSerializerTest
         // ExhangeType: 💎
         // ExchangeName: ✂ > 📜
         // RoutingKey: 🦎
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
             ReplyToAddress = new PublicationAddress("\uD83D\uDC8E", "\u2702 > \uD83D\uDCDC", "  🦎 "),
         };
@@ -160,7 +160,7 @@ public class MessageSerializerTest
     [TestMethod]
     public async Task WriteAndRead_HeaderContainsList()
     {
-        var headers = new Dictionary<string, object>
+        var headers = new Dictionary<string, object?>
         {
             { "test string", "My test value" },
             { "test binary", Encoding.UTF8.GetBytes("My test binary value") },
@@ -216,7 +216,7 @@ public class MessageSerializerTest
 
         headers.Add("test list", list);
 
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
             Headers = headers
         };
@@ -342,7 +342,7 @@ public class MessageSerializerTest
 
         // 4 bytes = preamble, 8 bytes - timestamp, 1 byte - start properties,
         // 1 bytes = property, 1 byte - MessageId property, 4 bytes - string length
-        messageBytes[19 + message.Properties!.MessageId.Length - 1] = 226;
+        messageBytes[19 + message.Properties!.MessageId!.Length - 1] = 226;
 
         var deserializedMessage = await DeserializeMessage(messageBytes);
 
@@ -352,23 +352,24 @@ public class MessageSerializerTest
         Assert.IsNotNull(deserializedMessage.Properties);
         Assert.AreEqual(expectedMessageId, deserializedMessage.Properties.MessageId);
 
-        message.Properties.MessageId = expectedMessageId;
+        var basicProperties = (BasicProperties)message.Properties;
+        basicProperties.MessageId = expectedMessageId;
         MessageAssert.AreEqual(message, deserializedMessage);
     }
 
     [TestMethod]
     public async Task WriteAndRead_PropertiesAndBodyAreDuplicatedWithDifferentValues()
     {
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
             AppId = "Test application",
             ClusterId = "Cluster tested",
             ContentEncoding = "Unicode",
             ContentType = "application/json",
             CorrelationId = Guid.NewGuid().ToString(),
-            DeliveryMode = 2,
+            DeliveryMode = DeliveryModes.Persistent,
             Expiration = "tomorrow",
-            Headers = new Dictionary<string, object>(),
+            Headers = new Dictionary<string, object?>(),
             MessageId = Guid.NewGuid().ToString(),
             Persistent = true,
             Priority = 129,
@@ -395,21 +396,19 @@ public class MessageSerializerTest
 
         var deserializedMessage = await DeserializeMessage(messageBytes);
 
-        var expectedMessage = new Message(message2.Body, message1.Properties, TestTimestamp);
-        expectedMessage.Properties!.MessageId = message2.Properties!.MessageId;
-        expectedMessage.Properties.Timestamp = message2.Properties.Timestamp;
-        expectedMessage.Properties.Type = message2.Properties.Type;
+        var basicProperties = (BasicProperties)message1.Properties!;
+        basicProperties.MessageId = message2.Properties!.MessageId;
+        basicProperties.Timestamp = message2.Properties.Timestamp;
+        basicProperties.Type = message2.Properties.Type;
 
+        var expectedMessage = new Message(message2.Body, basicProperties, TestTimestamp);
         MessageAssert.AreEqual(expectedMessage, deserializedMessage);
     }
 
     [TestMethod]
     public async Task WriteAndRead_NoHeadersButIsHeadersPresentIsTrue()
     {
-        var properties = new BasicPropertiesMock
-        {
-            OverrideIsHeadersPresent = true
-        };
+        var properties = new BasicProperties();
         const string text = """
             When publishing a message via RabbitMQ Management page,
             then the message has IsHeadersPresent set to true,
@@ -441,14 +440,14 @@ public class MessageSerializerTest
     {
         var messageSerializer = new MessageSerializer();
         using var stream = new MemoryStream(messageBytes);
-        return await messageSerializer.ReadMessage(stream, () => new BasicPropertiesMock());
+        return await messageSerializer.ReadMessage(stream);
     }
 
     [SuppressMessage("Style", "IDE0047:Remove unnecessary parentheses", Justification = "Keep parentheses for modulo.")]
     private static Message CreateSampleMessage()
     {
         // Type: Test message (💎, 📜, ✂, 🦎, 🖖)
-        var properties = new BasicPropertiesMock
+        var properties = new BasicProperties
         {
             MessageId = Guid.NewGuid().ToString(),
             Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),

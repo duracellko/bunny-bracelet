@@ -7,7 +7,7 @@ namespace BunnyBracelet;
 /// </summary>
 public static class StreamExtentions
 {
-    public static async ValueTask ReadToEndAsync(this Stream stream)
+    public static async ValueTask ReadToEndAsync(this Stream stream, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
@@ -18,10 +18,10 @@ public static class StreamExtentions
             // 128 bytes is size of 2 blocks of SHA256.
             var bufferMemory = buffer.AsMemory()[..128];
 
-            var bytesRead = await stream.ReadAsync(buffer);
+            var bytesRead = await stream.ReadAsync(buffer, cancellationToken);
             while (bytesRead > 0)
             {
-                bytesRead = await stream.ReadAsync(buffer);
+                bytesRead = await stream.ReadAsync(buffer, cancellationToken);
             }
         }
         finally

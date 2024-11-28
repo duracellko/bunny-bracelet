@@ -29,28 +29,27 @@ public class MessageSerializer : IMessageSerializer
     private static readonly byte[] Preamble = [82, 77, 81, 82];
     private static readonly Encoding TextEncoding = Encoding.UTF8;
 
-    public async ValueTask<Message> ReadMessage(Stream stream, Func<IBasicProperties> propertiesFactory)
+    public async ValueTask<Message> ReadMessage(Stream stream, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        ArgumentNullException.ThrowIfNull(propertiesFactory);
 
         var pipe = new Pipe();
-        var writeTask = CopyStreamToPipeline(stream, pipe.Writer);
-        var readTask = ReadMessage(pipe.Reader, propertiesFactory);
+        var writeTask = CopyStreamToPipeline(stream, pipe.Writer, cancellationToken);
+        var readTask = ReadMessage(pipe.Reader, cancellationToken);
         await Task.WhenAll(writeTask, readTask);
         return await readTask;
     }
 
-    public ValueTask<Stream> ConvertMessageToStream(Message message)
+    public ValueTask<Stream> ConvertMessageToStream(Message message, CancellationToken cancellationToken = default)
     {
         var pipe = new Pipe();
-        WriteMessageToPipeline(message, pipe.Writer);
+        WriteMessageToPipeline(message, pipe.Writer, cancellationToken);
         return ValueTask.FromResult(pipe.Reader.AsStream());
     }
 
     #region ReadMessage
 
-    private static async Task CopyStreamToPipeline(Stream stream, PipeWriter writer)
+    private static async Task CopyStreamToPipeline(Stream stream, PipeWriter writer, CancellationToken cancellationToken)
     {
         try
         {
@@ -58,11 +57,11 @@ public class MessageSerializer : IMessageSerializer
             while (!finished)
             {
                 var buffer = writer.GetMemory();
-                var bytesRead = await stream.ReadAsync(buffer);
+                var bytesRead = await stream.ReadAsync(buffer, cancellationToken);
                 if (bytesRead != 0)
                 {
                     writer.Advance(bytesRead);
-                    var result = await writer.FlushAsync();
+                    var result = await writer.FlushAsync(cancellationToken);
                     if (result.IsCompleted)
                     {
                         finished = true;
@@ -80,21 +79,21 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async Task<Message> ReadMessage(PipeReader reader, Func<IBasicProperties> propertiesFactory)
+    private static async Task<Message> ReadMessage(PipeReader reader, CancellationToken cancellationToken)
     {
         try
         {
-            var readResult = await reader.ReadAtLeastAsync(4);
+            var readResult = await reader.ReadAtLeastAsync(4, cancellationToken);
             var buffer = readResult.Buffer;
             buffer = ReadPreamble(buffer);
             reader.AdvanceTo(buffer.Start);
 
-            var state = new MessageParsingState(propertiesFactory);
-            await ReadTimestamp(reader, state);
+            var state = new MessageParsingState();
+            await ReadTimestamp(reader, state, cancellationToken);
 
             while (!state.IsCompleted)
             {
-                var code = await ReadByte(reader);
+                var code = await ReadByte(reader, cancellationToken);
 
                 switch (code)
                 {
@@ -102,13 +101,13 @@ public class MessageSerializer : IMessageSerializer
                         state.CreateProperties();
                         break;
                     case Codes.Property:
-                        await ReadProperty(reader, state);
+                        await ReadProperty(reader, state, cancellationToken);
                         break;
                     case Codes.Header:
-                        await ReadHeader(reader, state);
+                        await ReadHeader(reader, state, cancellationToken);
                         break;
                     case Codes.Body:
-                        state.Body = await ReadByteArray(reader);
+                        state.Body = await ReadByteArray(reader, cancellationToken);
                         break;
                     case Codes.EndOfMesage:
                         state.IsCompleted = true;
@@ -152,9 +151,9 @@ public class MessageSerializer : IMessageSerializer
         return buffer.Slice(4);
     }
 
-    private static async ValueTask ReadTimestamp(PipeReader reader, MessageParsingState state)
+    private static async ValueTask ReadTimestamp(PipeReader reader, MessageParsingState state, CancellationToken cancellationToken)
     {
-        var timestampBinary = await ReadInt64(reader);
+        var timestampBinary = await ReadInt64(reader, cancellationToken);
         if (timestampBinary < 0)
         {
             throw new MessageException("Timestamp should be in UTC, but local time zone bit was detected.");
@@ -163,106 +162,106 @@ public class MessageSerializer : IMessageSerializer
         state.Timestamp = DateTime.FromBinary(timestampBinary);
     }
 
-    private static async ValueTask ReadProperty(PipeReader reader, MessageParsingState state)
+    private static async ValueTask ReadProperty(PipeReader reader, MessageParsingState state, CancellationToken cancellationToken)
     {
         if (state.Properties is null)
         {
             throw new MessageException("BasicProperties code should preceed Property code.");
         }
 
-        var propertyCode = await ReadByte(reader);
+        var propertyCode = await ReadByte(reader, cancellationToken);
 
         switch (propertyCode)
         {
             case PropertyCodes.AppId:
-                state.Properties.AppId = await ReadString(reader);
+                state.Properties.AppId = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.ClusterId:
-                state.Properties.ClusterId = await ReadString(reader);
+                state.Properties.ClusterId = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.ContentEncoding:
-                state.Properties.ContentEncoding = await ReadString(reader);
+                state.Properties.ContentEncoding = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.ContentType:
-                state.Properties.ContentType = await ReadString(reader);
+                state.Properties.ContentType = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.CorrelationId:
-                state.Properties.CorrelationId = await ReadString(reader);
+                state.Properties.CorrelationId = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.DeliveryMode:
-                state.Properties.DeliveryMode = await ReadByte(reader);
+                state.Properties.DeliveryMode = (DeliveryModes)await ReadByte(reader, cancellationToken);
                 break;
             case PropertyCodes.Expiration:
-                state.Properties.Expiration = await ReadString(reader);
+                state.Properties.Expiration = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.MessageId:
-                state.Properties.MessageId = await ReadString(reader);
+                state.Properties.MessageId = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.Priority:
-                state.Properties.Priority = await ReadByte(reader);
+                state.Properties.Priority = await ReadByte(reader, cancellationToken);
                 break;
             case PropertyCodes.ReplyTo:
-                state.Properties.ReplyTo = await ReadString(reader);
+                state.Properties.ReplyTo = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.ReplyToAddress:
-                state.Properties.ReplyToAddress = await ReadPublicationAddress(reader);
+                state.Properties.ReplyToAddress = await ReadPublicationAddress(reader, cancellationToken);
                 break;
             case PropertyCodes.Timestamp:
-                state.Properties.Timestamp = await ReadTimestamp(reader);
+                state.Properties.Timestamp = await ReadTimestamp(reader, cancellationToken);
                 break;
             case PropertyCodes.Type:
-                state.Properties.Type = await ReadString(reader);
+                state.Properties.Type = await ReadString(reader, cancellationToken);
                 break;
             case PropertyCodes.UserId:
-                state.Properties.UserId = await ReadString(reader);
+                state.Properties.UserId = await ReadString(reader, cancellationToken);
                 break;
             default:
                 throw new MessageException($"Unexpected code {propertyCode} reading message.");
         }
     }
 
-    private static async ValueTask ReadHeader(PipeReader reader, MessageParsingState state)
+    private static async ValueTask ReadHeader(PipeReader reader, MessageParsingState state, CancellationToken cancellationToken)
     {
         if (state.Properties is null)
         {
             throw new MessageException("BasicProperties code should preceed Header code.");
         }
 
-        var key = await ReadString(reader);
-        var value = await ReadHeaderValue(reader);
+        var key = await ReadString(reader, cancellationToken);
+        var value = await ReadHeaderValue(reader, cancellationToken);
         state.AddHeader(key, value);
     }
 
-    private static async ValueTask<object> ReadHeaderValue(PipeReader reader)
+    private static async ValueTask<object> ReadHeaderValue(PipeReader reader, CancellationToken cancellationToken)
     {
-        var valueTypeCode = await ReadByte(reader);
+        var valueTypeCode = await ReadByte(reader, cancellationToken);
         return valueTypeCode switch
         {
-            ValueTypeCodes.ByteArray => await ReadByteArray(reader),
-            ValueTypeCodes.Boolean => await ReadBoolean(reader),
-            ValueTypeCodes.Byte => await ReadByte(reader),
-            ValueTypeCodes.Int16 => await ReadInt16(reader),
-            ValueTypeCodes.Int32 => await ReadInt32(reader),
-            ValueTypeCodes.Int64 => await ReadInt64(reader),
-            ValueTypeCodes.UInt16 => await ReadUInt16(reader),
-            ValueTypeCodes.UInt32 => await ReadUInt32(reader),
-            ValueTypeCodes.UInt64 => await ReadUInt64(reader),
-            ValueTypeCodes.Single => await ReadSingle(reader),
-            ValueTypeCodes.Double => await ReadDouble(reader),
-            ValueTypeCodes.Decimal => await ReadDecimal(reader),
-            ValueTypeCodes.String => await ReadString(reader),
-            ValueTypeCodes.Timestamp => await ReadTimestamp(reader),
-            ValueTypeCodes.List => await ReadList(reader),
+            ValueTypeCodes.ByteArray => await ReadByteArray(reader, cancellationToken),
+            ValueTypeCodes.Boolean => await ReadBoolean(reader, cancellationToken),
+            ValueTypeCodes.Byte => await ReadByte(reader, cancellationToken),
+            ValueTypeCodes.Int16 => await ReadInt16(reader, cancellationToken),
+            ValueTypeCodes.Int32 => await ReadInt32(reader, cancellationToken),
+            ValueTypeCodes.Int64 => await ReadInt64(reader, cancellationToken),
+            ValueTypeCodes.UInt16 => await ReadUInt16(reader, cancellationToken),
+            ValueTypeCodes.UInt32 => await ReadUInt32(reader, cancellationToken),
+            ValueTypeCodes.UInt64 => await ReadUInt64(reader, cancellationToken),
+            ValueTypeCodes.Single => await ReadSingle(reader, cancellationToken),
+            ValueTypeCodes.Double => await ReadDouble(reader, cancellationToken),
+            ValueTypeCodes.Decimal => await ReadDecimal(reader, cancellationToken),
+            ValueTypeCodes.String => await ReadString(reader, cancellationToken),
+            ValueTypeCodes.Timestamp => await ReadTimestamp(reader, cancellationToken),
+            ValueTypeCodes.List => await ReadList(reader, cancellationToken),
             _ => throw new MessageException($"Unexpected header value type code {valueTypeCode}."),
         };
     }
 
-    private static async ValueTask<string> ReadString(PipeReader reader)
+    private static async ValueTask<string> ReadString(PipeReader reader, CancellationToken cancellationToken)
     {
         const byte nullTerminator = 0;
 
-        var stringLength = await ReadInt32(reader);
-        var readResult = await reader.ReadAtLeastAsync(stringLength);
+        var stringLength = await ReadInt32(reader, cancellationToken);
+        var readResult = await reader.ReadAtLeastAsync(stringLength, cancellationToken);
         var stringBuffer = readResult.Buffer.Slice(0, stringLength);
 
         if (stringBuffer.PositionOf(nullTerminator).HasValue)
@@ -275,27 +274,27 @@ public class MessageSerializer : IMessageSerializer
         return result;
     }
 
-    private static async ValueTask<bool> ReadBoolean(PipeReader reader)
+    private static async ValueTask<bool> ReadBoolean(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAsync();
+        var readResult = await reader.ReadAsync(cancellationToken);
         byte value = 0;
         readResult.Buffer.Slice(0, 1).CopyTo(new Span<byte>(ref value));
         reader.AdvanceTo(readResult.Buffer.Slice(1).Start);
         return value != 0;
     }
 
-    private static async ValueTask<byte> ReadByte(PipeReader reader)
+    private static async ValueTask<byte> ReadByte(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAsync();
+        var readResult = await reader.ReadAsync(cancellationToken);
         byte value = 0;
         readResult.Buffer.Slice(0, 1).CopyTo(new Span<byte>(ref value));
         reader.AdvanceTo(readResult.Buffer.Slice(1).Start);
         return value;
     }
 
-    private static async ValueTask<short> ReadInt16(PipeReader reader)
+    private static async ValueTask<short> ReadInt16(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(2);
+        var readResult = await reader.ReadAtLeastAsync(2, cancellationToken);
         var result = GetInt16(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(2).Start);
         return result;
@@ -308,9 +307,9 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<int> ReadInt32(PipeReader reader)
+    private static async ValueTask<int> ReadInt32(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(4);
+        var readResult = await reader.ReadAtLeastAsync(4, cancellationToken);
         var result = GetInt32(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(4).Start);
         return result;
@@ -323,9 +322,9 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<long> ReadInt64(PipeReader reader)
+    private static async ValueTask<long> ReadInt64(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(8);
+        var readResult = await reader.ReadAtLeastAsync(8, cancellationToken);
         var result = GetInt64(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(8).Start);
         return result;
@@ -338,9 +337,9 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<ushort> ReadUInt16(PipeReader reader)
+    private static async ValueTask<ushort> ReadUInt16(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(2);
+        var readResult = await reader.ReadAtLeastAsync(2, cancellationToken);
         var result = GetUInt16(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(2).Start);
         return result;
@@ -353,9 +352,9 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<uint> ReadUInt32(PipeReader reader)
+    private static async ValueTask<uint> ReadUInt32(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(4);
+        var readResult = await reader.ReadAtLeastAsync(4, cancellationToken);
         var result = GetUInt32(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(4).Start);
         return result;
@@ -368,9 +367,9 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<ulong> ReadUInt64(PipeReader reader)
+    private static async ValueTask<ulong> ReadUInt64(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(8);
+        var readResult = await reader.ReadAtLeastAsync(8, cancellationToken);
         var result = GetUInt64(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(8).Start);
         return result;
@@ -383,9 +382,9 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<float> ReadSingle(PipeReader reader)
+    private static async ValueTask<float> ReadSingle(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(4);
+        var readResult = await reader.ReadAtLeastAsync(4, cancellationToken);
         var result = GetSingle(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(4).Start);
         return result;
@@ -398,9 +397,9 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<double> ReadDouble(PipeReader reader)
+    private static async ValueTask<double> ReadDouble(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(8);
+        var readResult = await reader.ReadAtLeastAsync(8, cancellationToken);
         var result = GetDouble(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(8).Start);
         return result;
@@ -413,9 +412,9 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<decimal> ReadDecimal(PipeReader reader)
+    private static async ValueTask<decimal> ReadDecimal(PipeReader reader, CancellationToken cancellationToken)
     {
-        var readResult = await reader.ReadAtLeastAsync(16);
+        var readResult = await reader.ReadAtLeastAsync(16, cancellationToken);
         var result = ReadDecimal(readResult.Buffer);
         reader.AdvanceTo(readResult.Buffer.Slice(16).Start);
         return result;
@@ -441,37 +440,37 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask<byte[]> ReadByteArray(PipeReader reader)
+    private static async ValueTask<byte[]> ReadByteArray(PipeReader reader, CancellationToken cancellationToken)
     {
-        var length = await ReadInt32(reader);
-        var readResult = await reader.ReadAtLeastAsync(length);
+        var length = await ReadInt32(reader, cancellationToken);
+        var readResult = await reader.ReadAtLeastAsync(length, cancellationToken);
         var result = new byte[length];
         readResult.Buffer.Slice(0, length).CopyTo(result);
         reader.AdvanceTo(readResult.Buffer.Slice(length).Start);
         return result;
     }
 
-    private static async ValueTask<AmqpTimestamp> ReadTimestamp(PipeReader reader)
+    private static async ValueTask<AmqpTimestamp> ReadTimestamp(PipeReader reader, CancellationToken cancellationToken)
     {
-        return new AmqpTimestamp(await ReadInt64(reader));
+        return new AmqpTimestamp(await ReadInt64(reader, cancellationToken));
     }
 
-    private static async ValueTask<IReadOnlyList<object>> ReadList(PipeReader reader)
+    private static async ValueTask<IReadOnlyList<object>> ReadList(PipeReader reader, CancellationToken cancellationToken)
     {
-        var itemsCount = await ReadInt32(reader);
+        var itemsCount = await ReadInt32(reader, cancellationToken);
         var result = new List<object>(itemsCount);
 
         for (var i = 0; i < itemsCount; i++)
         {
-            result.Add(await ReadHeaderValue(reader));
+            result.Add(await ReadHeaderValue(reader, cancellationToken));
         }
 
         return result;
     }
 
-    private static async ValueTask<PublicationAddress> ReadPublicationAddress(PipeReader reader)
+    private static async ValueTask<PublicationAddress> ReadPublicationAddress(PipeReader reader, CancellationToken cancellationToken)
     {
-        var valueFlags = await ReadByte(reader);
+        var valueFlags = await ReadByte(reader, cancellationToken);
 
         string? exchangeType = null;
         string? exchangeName = null;
@@ -479,20 +478,20 @@ public class MessageSerializer : IMessageSerializer
 
         if ((valueFlags & 1) != 0)
         {
-            exchangeType = await ReadString(reader);
+            exchangeType = await ReadString(reader, cancellationToken);
         }
 
         if ((valueFlags & 2) != 0)
         {
-            exchangeName = await ReadString(reader);
+            exchangeName = await ReadString(reader, cancellationToken);
         }
 
         if ((valueFlags & 4) != 0)
         {
-            routingKey = await ReadString(reader);
+            routingKey = await ReadString(reader, cancellationToken);
         }
 
-        return new PublicationAddress(exchangeType, exchangeName, routingKey);
+        return new PublicationAddress(exchangeType ?? string.Empty, exchangeName ?? string.Empty, routingKey ?? string.Empty);
     }
 
     #endregion
@@ -500,7 +499,7 @@ public class MessageSerializer : IMessageSerializer
     #region ConvertMessageToStream
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "All exceptions are reported to reader.")]
-    private static async void WriteMessageToPipeline(Message message, PipeWriter writer)
+    private static async void WriteMessageToPipeline(Message message, PipeWriter writer, CancellationToken cancellationToken)
     {
         try
         {
@@ -509,12 +508,12 @@ public class MessageSerializer : IMessageSerializer
 
             if (message.Properties is not null)
             {
-                await WriteProperties(message.Properties, writer);
+                await WriteProperties(message.Properties, writer, cancellationToken);
             }
 
             WriteBody(writer, message.Body);
             WriteEndOfMesage(writer);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
             await writer.CompleteAsync();
         }
         catch (Exception ex)
@@ -535,101 +534,101 @@ public class MessageSerializer : IMessageSerializer
         WriteInt64(writer, timestamp.ToBinary());
     }
 
-    private static async ValueTask WriteProperties(IBasicProperties properties, PipeWriter writer)
+    private static async ValueTask WriteProperties(IReadOnlyBasicProperties properties, PipeWriter writer, CancellationToken cancellationToken)
     {
         WriteBasicProperties(writer);
-        await writer.FlushAsync();
+        await writer.FlushAsync(cancellationToken);
 
         if (properties.IsAppIdPresent())
         {
             WriteProperty(writer, PropertyCodes.AppId, properties.AppId);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsClusterIdPresent())
         {
             WriteProperty(writer, PropertyCodes.ClusterId, properties.ClusterId);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsContentEncodingPresent())
         {
             WriteProperty(writer, PropertyCodes.ContentEncoding, properties.ContentEncoding);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsContentTypePresent())
         {
             WriteProperty(writer, PropertyCodes.ContentType, properties.ContentType);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsCorrelationIdPresent())
         {
             WriteProperty(writer, PropertyCodes.CorrelationId, properties.CorrelationId);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsDeliveryModePresent())
         {
-            WriteProperty(writer, PropertyCodes.DeliveryMode, properties.DeliveryMode);
-            await writer.FlushAsync();
+            WriteProperty(writer, PropertyCodes.DeliveryMode, (byte)properties.DeliveryMode);
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsExpirationPresent())
         {
             WriteProperty(writer, PropertyCodes.Expiration, properties.Expiration);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsMessageIdPresent())
         {
             WriteProperty(writer, PropertyCodes.MessageId, properties.MessageId);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsPriorityPresent())
         {
             WriteProperty(writer, PropertyCodes.Priority, properties.Priority);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsReplyToPresent())
         {
             WriteProperty(writer, PropertyCodes.ReplyTo, properties.ReplyTo);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.ReplyToAddress is not null)
         {
             WritePublicationAddress(writer, PropertyCodes.ReplyToAddress, properties.ReplyToAddress);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsTimestampPresent())
         {
             WriteProperty(writer, PropertyCodes.Timestamp, properties.Timestamp.UnixTime);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsTypePresent())
         {
             WriteProperty(writer, PropertyCodes.Type, properties.Type);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         if (properties.IsUserIdPresent())
         {
             WriteProperty(writer, PropertyCodes.UserId, properties.UserId);
-            await writer.FlushAsync();
+            await writer.FlushAsync(cancellationToken);
         }
 
         // When publishing a message via RabbitMQ Management page,
         // then the message has IsHeadersPresent set to true, but Headers property is null.
         if (properties.IsHeadersPresent() && properties.Headers is not null)
         {
-            await WriteHeaders(properties.Headers, writer);
-            await writer.FlushAsync();
+            await WriteHeaders(properties.Headers, writer, cancellationToken);
+            await writer.FlushAsync(cancellationToken);
         }
     }
 
@@ -640,14 +639,17 @@ public class MessageSerializer : IMessageSerializer
         writer.Advance(1);
     }
 
-    private static void WriteProperty(PipeWriter writer, byte code, string value)
+    private static void WriteProperty(PipeWriter writer, byte code, string? value)
     {
-        var buffer = writer.GetSpan(2);
-        buffer[0] = Codes.Property;
-        buffer[1] = code;
-        writer.Advance(2);
+        if (value != null)
+        {
+            var buffer = writer.GetSpan(2);
+            buffer[0] = Codes.Property;
+            buffer[1] = code;
+            writer.Advance(2);
 
-        WriteString(writer, value);
+            WriteString(writer, value);
+        }
     }
 
     private static void WriteProperty(PipeWriter writer, byte code, byte value)
@@ -709,12 +711,15 @@ public class MessageSerializer : IMessageSerializer
         }
     }
 
-    private static async ValueTask WriteHeaders(IDictionary<string, object> headers, PipeWriter writer)
+    private static async ValueTask WriteHeaders(IDictionary<string, object?> headers, PipeWriter writer, CancellationToken cancellationToken)
     {
         foreach (var keyValuePair in headers)
         {
-            WriteHeader(writer, keyValuePair.Key, keyValuePair.Value);
-            await writer.FlushAsync();
+            if (keyValuePair.Value is not null)
+            {
+                WriteHeader(writer, keyValuePair.Key, keyValuePair.Value);
+                await writer.FlushAsync(cancellationToken);
+            }
         }
     }
 
@@ -1007,16 +1012,9 @@ public class MessageSerializer : IMessageSerializer
 
     private sealed class MessageParsingState
     {
-        private readonly Func<IBasicProperties> propertiesFactory;
-
-        public MessageParsingState(Func<IBasicProperties> propertiesFactory)
-        {
-            this.propertiesFactory = propertiesFactory;
-        }
-
         public bool IsCompleted { get; set; }
 
-        public IBasicProperties? Properties { get; private set; }
+        public BasicProperties? Properties { get; private set; }
 
         public ReadOnlyMemory<byte> Body { get; set; }
 
@@ -1024,16 +1022,14 @@ public class MessageSerializer : IMessageSerializer
 
         public void CreateProperties()
         {
-            Properties ??= propertiesFactory();
+            Properties ??= new BasicProperties();
         }
 
-        public void AddHeader(string key, object value)
+        public void AddHeader(string key, object? value)
         {
-            if (Properties!.Headers is null)
-            {
-                Properties.Headers = new Dictionary<string, object>();
-            }
+            System.Diagnostics.Debug.Assert(Properties is not null, "CreateProperties is called before AddHeader.");
 
+            Properties.Headers ??= new Dictionary<string, object?>();
             Properties.Headers[key] = value;
         }
     }
