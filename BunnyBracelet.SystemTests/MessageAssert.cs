@@ -9,7 +9,7 @@ internal static class MessageAssert
         CollectionAssert.AreEqual(expected, actual, "Body is different.");
     }
 
-    public static void ArePropertiesEqual(IBasicProperties expected, IBasicProperties actual)
+    public static void ArePropertiesEqual(IReadOnlyBasicProperties expected, IReadOnlyBasicProperties actual)
     {
         const string IsDifferent = " is different.";
 

@@ -11,7 +11,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using RabbitMQ.Client;
 
 using ByteArray = byte[];
-using RabbitMessage = (RabbitMQ.Client.IBasicProperties? properties, byte[] body);
+using RabbitMessage = (RabbitMQ.Client.IReadOnlyBasicProperties? properties, byte[] body);
 
 namespace BunnyBracelet.SystemTests;
 
@@ -58,26 +58,27 @@ public class SystemTest
             await AssertHealthy(bunny1);
             await AssertUnhealthy(bunny2);
 
-            using var connection1 = rabbit1.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
 
-            using var connection2 = rabbit2.CreateConnection();
-            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+            await using var connection2 = rabbit2.CreateConnection();
+            var channel2 = await connection2.GetChannel();
+            await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!);
 
-            var headers = new Dictionary<string, object>()
+            var headers = new Dictionary<string, object?>()
             {
                 { "Test header", Array.Empty<byte>() },
                 { string.Empty, Guid.NewGuid().ToByteArray() },
                 { "My header (\uD83D\uDC8E, \uD83D\uDCDC, \u2702)", Encoding.Unicode.GetBytes("My value") }
             };
 
-            var properties = connection1.CreateProperties();
+            var properties = RabbitConnection.CreateProperties();
             properties.AppId = "Test app (\uD83D\uDC8E, \uD83D\uDCDC, \u2702, \uD83E\uDD8E, \uD83D\uDD96)";
             properties.ClusterId = "Cluster tested";
             properties.ContentEncoding = "Unicode";
             properties.ContentType = "application/json";
             properties.CorrelationId = Guid.NewGuid().ToString();
-            properties.DeliveryMode = 1;
+            properties.DeliveryMode = DeliveryModes.Transient;
             properties.Expiration = "60000";
             properties.Headers = headers;
             properties.MessageId = Guid.NewGuid().ToString();
@@ -90,7 +91,7 @@ public class SystemTest
             properties.UserId = "bunny";
 
             var messageContent = GetRandomBytes(2224);
-            connection1.Publish(bunny1.OutboundExchange.Name!, properties, messageContent);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, properties, messageContent);
 
             await AssertMessageInQueue(queue2, (properties, messageContent), 1);
             await AssertHealthy(bunny1, bunny2);
@@ -126,19 +127,21 @@ public class SystemTest
             var messageId = Guid.NewGuid().ToString();
             var messageContent = GetRandomBytes(5000);
 
-            using var connection1 = rabbit1.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
 
-            using var connection2 = rabbit2.CreateConnection();
-            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+            await using var connection2 = rabbit2.CreateConnection();
+            var channel2 = await connection2.GetChannel();
+            await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!);
 
-            using var connection3 = rabbit3.CreateConnection();
-            connection3.Model.ExchangeDeclare(bunny3.InboundExchange.Name, ExchangeType.Fanout);
-            var queue3 = connection3.Consume(bunny3.InboundExchange.Name!);
+            await using var connection3 = rabbit3.CreateConnection();
+            var channel3 = await connection3.GetChannel();
+            await channel3.ExchangeDeclareAsync(bunny3.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue3 = await connection3.Consume(bunny3.InboundExchange.Name!);
 
-            var properties1 = connection1.CreateProperties();
+            var properties1 = RabbitConnection.CreateProperties();
             properties1.MessageId = messageId;
-            connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
 
             await AssertMessageInQueue(queue2, (properties1, messageContent), 1);
             await AssertMessageInQueue(queue3, (properties1, messageContent), 1);
@@ -173,15 +176,16 @@ public class SystemTest
             await AssertHealthy(bunny1, bunny2);
             await AssertUnhealthy(bunny3);
 
-            using var connection1 = rabbit1.CreateConnection();
-            using var connection2 = rabbit2.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
+            await using var connection2 = rabbit2.CreateConnection();
 
-            var messageList1 = CreateMessages(connection1, "MA-");
-            var messageList2 = CreateMessages(connection2, "MB-");
+            var messageList1 = CreateMessages("MA-");
+            var messageList2 = CreateMessages("MB-");
 
-            using var connection3 = rabbit3.CreateConnection();
-            connection3.Model.ExchangeDeclare(bunny3.InboundExchange.Name, ExchangeType.Fanout);
-            var queue3 = connection3.Consume(bunny3.InboundExchange.Name!);
+            await using var connection3 = rabbit3.CreateConnection();
+            var channel3 = await connection3.GetChannel();
+            await channel3.ExchangeDeclareAsync(bunny3.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue3 = await connection3.Consume(bunny3.InboundExchange.Name!);
 
             var task1 = SendMessages(connection1, messageList1, bunny1.OutboundExchange.Name!);
             var task2 = SendMessages(connection2, messageList2, bunny2.OutboundExchange.Name!);
@@ -189,7 +193,7 @@ public class SystemTest
 
             var messageResults = await WaitForMessages(queue3, 2000);
 
-            var messageDictionary = messageList1.Concat(messageList2).ToDictionary(i => i.properties!.MessageId);
+            var messageDictionary = messageList1.Concat(messageList2).ToDictionary(i => i.properties!.MessageId!);
             foreach (var messageResult in messageResults)
             {
                 var messageId = GetMessageId(messageResult);
@@ -201,11 +205,11 @@ public class SystemTest
             Assert.AreEqual(0, messageDictionary.Count, "All messages should be in queue 3.");
 
             // Verify that messages were received in correct order.
-            var messageIds = messageResults.Select(m => m.properties!.MessageId)
+            var messageIds = messageResults.Select(m => m.properties!.MessageId!)
                 .Where(id => id.StartsWith("MA-", StringComparison.Ordinal)).ToList();
             AssertCollectionIsOrdered(messageIds);
 
-            messageIds = messageResults.Select(m => m.properties!.MessageId)
+            messageIds = messageResults.Select(m => m.properties!.MessageId!)
                 .Where(id => id.StartsWith("MB-", StringComparison.Ordinal)).ToList();
             AssertCollectionIsOrdered(messageIds);
 
@@ -216,12 +220,12 @@ public class SystemTest
             await PutBunniesDown(bunny1, bunny2, bunny3);
         }
 
-        static List<RabbitMessage> CreateMessages(RabbitConnection connection, string prefix)
+        static List<RabbitMessage> CreateMessages(string prefix)
         {
             var result = new List<RabbitMessage>(1000);
             for (var i = 0; i < 1000; i++)
             {
-                var properties = connection.CreateProperties();
+                var properties = RabbitConnection.CreateProperties();
                 properties.MessageId = prefix + i.ToString("00000", CultureInfo.InvariantCulture);
                 result.Add((properties, GetRandomBytes(1551)));
             }
@@ -231,11 +235,11 @@ public class SystemTest
 
         static async Task SendMessages(RabbitConnection connection, List<RabbitMessage> messages, string exchange)
         {
-            await Task.Run(() =>
+            await Task.Run(async () =>
             {
                 foreach (var item in messages)
                 {
-                    connection.Publish(exchange, item.properties, item.body);
+                    await connection.Publish(exchange, item.properties, item.body);
                 }
             });
         }
@@ -269,17 +273,18 @@ public class SystemTest
             await AssertHealthy(bunny1);
             await AssertUnhealthy(bunny2);
 
-            using var connection1 = rabbit1.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
 
-            using var connection2 = rabbit2.CreateConnection();
-            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+            await using var connection2 = rabbit2.CreateConnection();
+            var channel2 = await connection2.GetChannel();
+            await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!);
 
-            var properties = connection1.CreateProperties();
+            var properties = RabbitConnection.CreateProperties();
             properties.Headers = CreateHeaders();
 
             var messageContent = GetRandomBytes(5000000);
-            connection1.Publish(bunny1.OutboundExchange.Name!, properties, messageContent);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, properties, messageContent);
 
             await AssertMessageInQueue(queue2, (properties, messageContent), 1);
             await AssertHealthy(bunny1, bunny2);
@@ -289,9 +294,9 @@ public class SystemTest
             await PutBunniesDown(bunny1, bunny2);
         }
 
-        static Dictionary<string, object> CreateHeaders()
+        static Dictionary<string, object?> CreateHeaders()
         {
-            var headers = new Dictionary<string, object>
+            var headers = new Dictionary<string, object?>
             {
                 { "test binary", Encoding.UTF8.GetBytes("My test binary value") },
                 { "test boolean", true },
@@ -364,40 +369,41 @@ public class SystemTest
         try
         {
             await AssertHealthy(bunny1, bunny2);
-            using var connection1 = rabbit1.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
             for (var i = 0; i < 3; i++)
             {
-                var properties = connection1.CreateProperties();
+                var properties = RabbitConnection.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
                 messages.Add((properties, GetRandomBytes(4020)));
             }
 
-            using (var connection2 = rabbit2.CreateConnection())
+            await using (var connection2 = rabbit2.CreateConnection())
             {
-                connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                var channel2 = await connection2.GetChannel();
+                await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+                var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
 
                 await AssertMessageInQueue(queue2, messages[0], 1);
             }
 
             await rabbit2.DisconnectContainerFromNetwork();
             await Task.Delay(200);
-            connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
             await Task.Delay(200);
 
             await AssertUnhealthy(bunny2);
             await AssertHealthy(bunny1);
             await rabbit2.ConnectContainerToNetwork();
 
-            using (var connection2 = rabbit2.CreateConnection())
+            await using (var connection2 = rabbit2.CreateConnection())
             {
-                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
 
                 await AssertMessageInQueue(queue2, messages[1], 2);
                 await AssertMessageInQueue(queue2, messages[2], 3);
@@ -434,22 +440,24 @@ public class SystemTest
         {
             await AssertHealthy(bunny1, bunny2);
 
-            using var connection1 = rabbit1.CreateConnection();
-            using var connection2 = rabbit2.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
+            await using var connection2 = rabbit2.CreateConnection();
 
-            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+            var channel2 = await connection2.GetChannel();
+            await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!);
 
-            var properties = connection1.CreateProperties();
+            var properties = RabbitConnection.CreateProperties();
             properties.MessageId = Guid.NewGuid().ToString();
 
             // Maximum HTTP request size in ASP.NET Core
             var body = GetRandomBytes(30000000);
-            connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
 
             await WaitForLogOutput(bunny1, "Message rejected by consumer");
 
-            var queueMessageCount = (int)connection1.Model.MessageCount(endpoint.QueueName);
+            var channel1 = await connection1.GetChannel();
+            var queueMessageCount = (int)await channel1.MessageCountAsync(endpoint.QueueName);
             Assert.AreEqual(0, queueMessageCount, "Outbound queue should be empty.");
             Assert.AreEqual(0, queue2.Count, "Inbound queue should be empty.");
 
@@ -491,22 +499,23 @@ public class SystemTest
             var messages = new List<RabbitMessage>();
             await AssertHealthy(bunny1, bunny2);
 
-            using (var connection1 = rabbit1.CreateConnection())
+            await using (var connection1 = rabbit1.CreateConnection())
             {
                 for (var i = 0; i < 3; i++)
                 {
-                    var properties = connection1.CreateProperties();
+                    var properties = RabbitConnection.CreateProperties();
                     properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
                     properties.Persistent = true;
                     messages.Add((properties, GetRandomBytes(4000)));
                 }
 
-                using (var connection2 = rabbit2.CreateConnection())
+                await using (var connection2 = rabbit2.CreateConnection())
                 {
-                    connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout, true);
-                    var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                    var channel2 = await connection2.GetChannel();
+                    await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout, true);
+                    var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                    connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+                    await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
 
                     await AssertMessageInQueue(queue2, messages[0], 1);
                 }
@@ -515,7 +524,7 @@ public class SystemTest
                 await Task.Delay(200);
                 await rabbit2.StopContainer();
 
-                connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
 
                 await AssertHealthy(bunny1);
                 await AssertUnhealthy(bunny2);
@@ -532,15 +541,15 @@ public class SystemTest
             await rabbit1.ConnectContainerToNetwork();
             await rabbit1.StartContainer();
 
-            using (var connection1 = rabbit1.CreateConnection())
+            await using (var connection1 = rabbit1.CreateConnection())
             {
-                connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
 
                 await rabbit2.ConnectContainerToNetwork();
                 await rabbit2.StartContainer();
 
-                using var connection2 = rabbit2.CreateConnection();
-                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                await using var connection2 = rabbit2.CreateConnection();
+                var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
                 await AssertMessageInQueue(queue2, messages[1], 2);
                 await AssertMessageInQueue(queue2, messages[2], 3);
             }
@@ -594,23 +603,24 @@ public class SystemTest
             await AssertHealthy(bunny1);
             await AssertUnhealthy(bunny2);
 
-            using var connection1 = rabbit1.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
             for (var i = 0; i < 3; i++)
             {
-                var properties = connection1.CreateProperties();
+                var properties = RabbitConnection.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
                 properties.Expiration = expiration;
                 messages.Add((properties, GetRandomBytes(5000)));
             }
 
-            using (var connection2 = rabbit2.CreateConnection())
+            await using (var connection2 = rabbit2.CreateConnection())
             {
-                connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                var channel2 = await connection2.GetChannel();
+                await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+                var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
 
                 await AssertMessageInQueue(queue2, messages[0], 1);
             }
@@ -633,19 +643,19 @@ public class SystemTest
             // T+6000: 1st retry to relay message 2
             //
             // Note: Network recovery interval is 5 seconds
-            connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
             await Task.WhenAll(
                 Task.Delay(3500),
                 Task.Run(async () => await AssertHealthy(bunny1)),
                 Task.Run(async () => await AssertUnhealthy(bunny2)));
 
-            connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
             await Task.Delay(600);
             await rabbit2.ConnectContainerToNetwork();
 
-            using (var connection2 = rabbit2.CreateConnection())
+            await using (var connection2 = rabbit2.CreateConnection())
             {
-                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
                 await AssertMessageInQueue(queue2, messages[2], 3);
             }
 
@@ -681,23 +691,24 @@ public class SystemTest
             await AssertHealthy(bunny1);
             await AssertUnhealthy(bunny2);
 
-            using var connection1 = rabbit1.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
 
             var messages = new List<RabbitMessage>();
             for (var i = 0; i < 3; i++)
             {
-                var properties = connection1.CreateProperties();
+                var properties = RabbitConnection.CreateProperties();
                 properties.MessageId = i.ToString(CultureInfo.InvariantCulture);
                 properties.Expiration = expiration;
                 messages.Add((properties, GetRandomBytes(842)));
             }
 
-            using (var connection2 = rabbit2.CreateConnection())
+            await using (var connection2 = rabbit2.CreateConnection())
             {
-                connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                var channel2 = await connection2.GetChannel();
+                await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+                var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
 
                 await AssertMessageInQueue(queue2, messages[0], 1);
             }
@@ -706,23 +717,23 @@ public class SystemTest
             await Task.Delay(200);
 
             // Same scenario as StopDeliveryRetryAfterReachingMessageTTL
-            connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
             await Task.WhenAll(
                 Task.Delay(3500),
                 Task.Run(async () => await AssertHealthy(bunny1)),
                 Task.Run(async () => await AssertUnhealthy(bunny2)));
 
-            connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
             await Task.Delay(600);
             await rabbit2.ConnectContainerToNetwork();
 
-            using (var connection2 = rabbit2.CreateConnection())
+            await using (var connection2 = rabbit2.CreateConnection())
             {
                 // Start consuming messages at T+8000
                 // Notice that is after message 2 original expiration (T+7700)
                 // However, message 2 expiration is reset, when it is queue by bunny 2.
                 await Task.Delay(3900);
-                var queue2 = connection2.Consume(bunny2.InboundExchange.Name!, queueName);
+                var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
                 await AssertMessageInQueue(queue2, messages[2], 3);
             }
 
@@ -757,10 +768,10 @@ public class SystemTest
             var messageId = Guid.NewGuid().ToString();
             var messageContent = GetRandomBytes(100);
 
-            using var connection1 = rabbit1.CreateConnection();
-            var properties1 = connection1.CreateProperties();
+            await using var connection1 = rabbit1.CreateConnection();
+            var properties1 = RabbitConnection.CreateProperties();
             properties1.MessageId = messageId;
-            connection1.Publish(exchangeName, properties1, messageContent);
+            await connection1.Publish(exchangeName, properties1, messageContent);
 
             var expectedOutput = $"Relaying message (MessageId: {messageId}, CorrelationId: (null), Size: 100) from RabbitMQ exchange '{exchangeName}' to '{fakeBunny2.Uri}' failed.";
             await WaitForLogOutput(bunny, expectedOutput, TimeSpan.FromMilliseconds(1100));
@@ -999,8 +1010,9 @@ public class SystemTest
         await rabbit1.Cleanup();
         await Task.WhenAll(rabbit1.Start(), rabbit2.Start(), rabbit3.Start());
 
-        using var connection1 = rabbit1.CreateConnection();
-        connection1.Model.QueueDeclare(endpoint1.QueueName);
+        await using var connection1 = rabbit1.CreateConnection();
+        var channel1 = await connection1.GetChannel();
+        await channel1.QueueDeclareAsync(endpoint1.QueueName!);
 
         await Task.WhenAll(bunny1.Start(), bunny2.Start(), bunny3.Start());
 
@@ -1015,17 +1027,19 @@ public class SystemTest
             var messageId = Guid.NewGuid().ToString();
             var messageContent = GetRandomBytes(2000);
 
-            using var connection2 = rabbit2.CreateConnection();
-            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+            await using var connection2 = rabbit2.CreateConnection();
+            var channel2 = await connection2.GetChannel();
+            await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!);
 
-            using var connection3 = rabbit3.CreateConnection();
-            connection3.Model.ExchangeDeclare(bunny3.InboundExchange.Name, ExchangeType.Fanout);
-            var queue3 = connection3.Consume(bunny3.InboundExchange.Name!);
+            await using var connection3 = rabbit3.CreateConnection();
+            var channel3 = await connection3.GetChannel();
+            await channel3.ExchangeDeclareAsync(bunny3.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue3 = await connection3.Consume(bunny3.InboundExchange.Name!);
 
-            var properties1 = connection1.CreateProperties();
+            var properties1 = RabbitConnection.CreateProperties();
             properties1.MessageId = messageId;
-            connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
 
             await AssertMessageInQueue(queue3, (properties1, messageContent), 1);
             Assert.AreEqual(0, queue2.Count);
@@ -1101,19 +1115,21 @@ public class SystemTest
             var messageId = Guid.NewGuid().ToString();
             var messageContent = GetRandomBytes(5000);
 
-            using var connection1 = rabbit1.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
 
-            using var connection2 = rabbit2.CreateConnection();
-            connection2.Model.ExchangeDeclare(bunny2.InboundExchange.Name, ExchangeType.Fanout);
-            var queue2 = connection2.Consume(bunny2.InboundExchange.Name!);
+            await using var connection2 = rabbit2.CreateConnection();
+            var channel2 = await connection2.GetChannel();
+            await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!);
 
-            using var connection3 = rabbit3.CreateConnection();
-            connection3.Model.ExchangeDeclare(bunny3.InboundExchange.Name, ExchangeType.Fanout);
-            var queue3 = connection3.Consume(bunny3.InboundExchange.Name!);
+            await using var connection3 = rabbit3.CreateConnection();
+            var channel3 = await connection3.GetChannel();
+            await channel3.ExchangeDeclareAsync(bunny3.InboundExchange.Name!, ExchangeType.Fanout);
+            var queue3 = await connection3.Consume(bunny3.InboundExchange.Name!);
 
-            var properties1 = connection1.CreateProperties();
+            var properties1 = RabbitConnection.CreateProperties();
             properties1.MessageId = messageId;
-            connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
 
             var (propertiesResult, bodyResult) = await WaitForMessage(queue2, queue3);
             Assert.IsNotNull(propertiesResult, $"Message does not have basic properties.");
@@ -1182,12 +1198,12 @@ public class SystemTest
 
         try
         {
-            using var connection1 = rabbit1.CreateConnection();
+            await using var connection1 = rabbit1.CreateConnection();
 
-            var properties = connection1.CreateProperties();
+            var properties = RabbitConnection.CreateProperties();
             properties.MessageId = Guid.NewGuid().ToString();
             var body = GetRandomBytes(4000);
-            connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, properties, body);
 
             await Task.Delay(200);
             await rabbit2.DisconnectContainerFromNetwork();
