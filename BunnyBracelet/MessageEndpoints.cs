@@ -56,21 +56,23 @@ internal static class MessageEndpoints
             return;
         }
 
+        var cancellationToken = context.RequestAborted;
+
         try
         {
             var authenticationOptions = options.Value.Authentication;
             if (RequiresAuthentication(authenticationOptions))
             {
-                message = await ReadAndAuthenticateMessage(context, messageSerializer, rabbitService, authenticationOptions, logger);
+                message = await ReadAndAuthenticateMessage(context, messageSerializer, authenticationOptions, logger, cancellationToken);
             }
             else
             {
-                message = await messageSerializer.ReadMessage(context.Request.Body, rabbitService.CreateBasicProperties);
+                message = await messageSerializer.ReadMessage(context.Request.Body, cancellationToken);
             }
 
             if (message.HasValue && CheckMessageTimestamp(message.Value, context, options, logger))
             {
-                rabbitService.SendMessage(message.Value);
+                await rabbitService.SendMessage(message.Value, cancellationToken);
 
                 logger.InboundMessageForwarded(message.Value.Properties, message.Value.Body.Length, context.TraceIdentifier);
                 context.Response.StatusCode = StatusCodes.Status204NoContent;
@@ -80,7 +82,7 @@ internal static class MessageEndpoints
         {
             logger.ErrorReadingInboundMessage(ex, context.TraceIdentifier);
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await context.Response.WriteAsync(ex.Message);
+            await context.Response.WriteAsync(ex.Message, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -92,9 +94,9 @@ internal static class MessageEndpoints
     private static async ValueTask<Message?> ReadAndAuthenticateMessage(
         HttpContext context,
         IMessageSerializer messageSerializer,
-        RabbitService rabbitService,
         RelayAuthenticationOptions authenticationOptions,
-        ILogger logger)
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
         var keyIndex = GetAuthenticationKeyIndex(context);
         if (!keyIndex.HasValue)
@@ -118,7 +120,7 @@ internal static class MessageEndpoints
 
         try
         {
-            var message = await messageSerializer.ReadMessage(stream, rabbitService.CreateBasicProperties);
+            var message = await messageSerializer.ReadMessage(stream, cancellationToken);
             if (CheckAuthenticationCode(hmac, extendedTailStream.Tail))
             {
                 logger.MessageAuthenticated(keyIndex.Value);
@@ -127,7 +129,7 @@ internal static class MessageEndpoints
         }
         catch (MessageException)
         {
-            await stream.ReadToEndAsync();
+            await stream.ReadToEndAsync(cancellationToken);
             if (CheckAuthenticationCode(hmac, extendedTailStream.Tail))
             {
                 logger.MessageAuthenticated(keyIndex.Value);

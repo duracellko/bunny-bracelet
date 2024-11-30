@@ -10,19 +10,14 @@ namespace BunnyBracelet;
 /// to RabbitMQ <see cref="RabbitOptions.InboundExchange"/> and consume Messages
 /// from <see cref="RabbitOptions.OutboundExchange"/>.
 /// </summary>
-public sealed class RabbitService : IDisposable
+public sealed class RabbitService : IAsyncDisposable, IDisposable
 {
     private readonly IOptions<RabbitOptions> options;
     private readonly ILogger<RabbitService> logger;
 
-    // Lazy<T> cannot be used, because it caches exception.
-#if NET9_0_OR_GREATER
-    private readonly Lock connectionLock = new();
-#else
-    private readonly object connectionLock = new();
-#endif
+    private readonly SemaphoreSlim connectionFactorySemaphore = new(1);
     private IConnection? connectionStore;
-    private IModel? sendChannelStore;
+    private IChannel? sendChannelStore;
     private bool disposed;
     private volatile bool disposing;
 
@@ -44,53 +39,7 @@ public sealed class RabbitService : IDisposable
         }
     }
 
-    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Connection can be changed by a different thread.")]
-    private IConnection Connection
-    {
-        get
-        {
-            if (connectionStore is null)
-            {
-                lock (connectionLock)
-                {
-                    connectionStore ??= CreateConnection();
-                }
-            }
-
-            return connectionStore;
-        }
-    }
-
-    /// <summary>
-    /// Gets a RabbitMQ connection channel for sending messages to RabbitMQ.
-    /// Single channel is used to send all messages. Therefore, sending messages
-    /// is not thread-safe. Consumer of this object must ensure to not send
-    /// 2 messages in parallel.
-    /// </summary>
-    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Channel can be changed by a different thread.")]
-    private IModel SendChannel
-    {
-        get
-        {
-            // Ensure that connection is opened.
-            var connection = Connection;
-
-            if (sendChannelStore is null)
-            {
-                // Reusing the connectionLock. SendChannel is used only after
-                // the connection is created and then connectionLock is not
-                // required by connectionStore.
-                lock (connectionLock)
-                {
-                    sendChannelStore ??= CreateSendChannel(connection);
-                }
-            }
-
-            return sendChannelStore;
-        }
-    }
-
-    public void SendMessage(Message message)
+    public async ValueTask SendMessage(Message message, CancellationToken cancellationToken = default)
     {
         CheckDisposed();
 
@@ -104,7 +53,18 @@ public sealed class RabbitService : IDisposable
 
         try
         {
-            SendChannel.BasicPublish(exchange, string.Empty, message.Properties, message.Body);
+            var sendChannel = await GetSendChannel(cancellationToken);
+
+            if (message.Properties is not null)
+            {
+                var basicProperties = new BasicProperties(message.Properties);
+                await sendChannel.BasicPublishAsync(exchange, string.Empty, false, basicProperties, message.Body, cancellationToken);
+            }
+            else
+            {
+                await sendChannel.BasicPublishAsync(exchange, string.Empty, false, message.Body, cancellationToken);
+            }
+
             logger.MessagePublished(exchange, message.Properties, message.Body.Length);
         }
         catch (Exception ex)
@@ -114,14 +74,10 @@ public sealed class RabbitService : IDisposable
         }
     }
 
-    public IBasicProperties CreateBasicProperties()
-    {
-        CheckDisposed();
-
-        return SendChannel.CreateBasicProperties();
-    }
-
-    public IDisposable ConsumeMessages(Func<Message, Task<ProcessMessageResult>> process, RabbitQueueOptions? queueOptions)
+    public async ValueTask<IAsyncDisposable> ConsumeMessages(
+        Func<Message, CancellationToken, Task<ProcessMessageResult>> process,
+        RabbitQueueOptions? queueOptions,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(process);
         CheckDisposed();
@@ -136,27 +92,54 @@ public sealed class RabbitService : IDisposable
         logger.InitializingConsumer(exchangeName);
 
         // Create separate channel for each consumer.
-        var channel = Connection.CreateModel();
+        var connection = await GetConnection(cancellationToken);
+        var channel = await connection.CreateChannelAsync(null, cancellationToken);
         try
         {
-            channel.ExchangeDeclare(
+            await channel.ExchangeDeclareAsync(
                 exchangeName,
                 exchangeOptions.Type,
                 exchangeOptions.Durable,
                 exchangeOptions.AutoDelete,
-                null);
+                cancellationToken: cancellationToken);
             logger.ExchangeInitialized(exchangeName, exchangeOptions.Type, exchangeOptions.Durable);
 
             var messageConsumer = new MessageConsumer(channel, process, exchangeName, queueOptions, logger);
-            messageConsumer.Initialize();
+            await messageConsumer.Initialize(cancellationToken);
             return messageConsumer;
         }
         catch (Exception ex)
         {
             logger.ErrorInitializingConsumer(ex, exchangeName);
-            channel.Close();
-            channel.Dispose();
+            await channel.CloseAsync(cancellationToken);
+            await channel.DisposeAsync();
             throw;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!disposed)
+        {
+            disposing = true;
+
+            var connection = connectionStore;
+            if (connection is not null)
+            {
+                await connection.CloseAsync();
+                await connection.DisposeAsync();
+            }
+
+            // No need to close the channel. All channels are closed with connection.
+            var sendChannel = sendChannelStore;
+            if (sendChannel is not null)
+            {
+                await sendChannel.DisposeAsync();
+            }
+
+            connectionFactorySemaphore.Dispose();
+
+            disposed = true;
         }
     }
 
@@ -166,24 +149,40 @@ public sealed class RabbitService : IDisposable
         {
             disposing = true;
 
+            // Synchronous Dispose does not wait for closing connection, just disposes the connection directly.
             var connection = connectionStore;
-            if (connection is not null)
-            {
-                connection.Close();
-                connection.Dispose();
-            }
+            connection?.Dispose();
 
             var sendChannel = sendChannelStore;
-
-            // No need to close the channel. All channels are closed with connection.
             sendChannel?.Dispose();
+
+            connectionFactorySemaphore.Dispose();
 
             disposed = true;
         }
     }
 
+    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Connection can be changed by a different thread.")]
+    private async ValueTask<IConnection> GetConnection(CancellationToken cancellationToken)
+    {
+        if (connectionStore is null)
+        {
+            await connectionFactorySemaphore.WaitAsync(cancellationToken);
+            try
+            {
+                connectionStore ??= await CreateConnection(cancellationToken);
+            }
+            finally
+            {
+                connectionFactorySemaphore.Release();
+            }
+        }
+
+        return connectionStore;
+    }
+
     [SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "Throwing exception should not be simplified.")]
-    private IConnection CreateConnection()
+    private async ValueTask<IConnection> CreateConnection(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposing, this);
 
@@ -195,18 +194,48 @@ public sealed class RabbitService : IDisposable
 
         var connectionFactory = new ConnectionFactory
         {
-            Uri = uri,
-            DispatchConsumersAsync = true
+            Uri = uri
         };
 
         logger.ConnectingToRabbitMQ(uri);
 
-        var connection = connectionFactory.CreateConnection();
-        connection.CallbackException += ConnectionOnCallbackException;
+        var connection = await connectionFactory.CreateConnectionAsync(cancellationToken);
+        connection.CallbackExceptionAsync += ConnectionOnCallbackException;
         return connection;
     }
 
-    private IModel CreateSendChannel(IConnection connection)
+    /// <summary>
+    /// Gets a RabbitMQ connection channel for sending messages to RabbitMQ.
+    /// Single channel is used to send all messages. Therefore, sending messages
+    /// is not thread-safe. Consumer of this object must ensure to not send
+    /// 2 messages in parallel.
+    /// </summary>
+    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Channel can be changed by a different thread.")]
+    private async ValueTask<IChannel> GetSendChannel(CancellationToken cancellationToken)
+    {
+        // Ensure that connection is opened.
+        var connection = await GetConnection(cancellationToken);
+
+        if (sendChannelStore is null)
+        {
+            // Reusing the connectionLock. SendChannel is used only after
+            // the connection is created and then connectionLock is not
+            // required by connectionStore.
+            await connectionFactorySemaphore.WaitAsync(cancellationToken);
+            try
+            {
+                sendChannelStore ??= await CreateSendChannel(connection, cancellationToken);
+            }
+            finally
+            {
+                connectionFactorySemaphore.Release();
+            }
+        }
+
+        return sendChannelStore;
+    }
+
+    private async ValueTask<IChannel> CreateSendChannel(IConnection connection, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposing, this);
 
@@ -215,20 +244,21 @@ public sealed class RabbitService : IDisposable
         var exchangeName = exchangeOptions.Name;
         System.Diagnostics.Debug.Assert(!string.IsNullOrEmpty(exchangeName), "Inbound Exchange name is not specified.");
 
-        var channel = connection.CreateModel();
-        channel.ExchangeDeclare(
+        var channel = await connection.CreateChannelAsync(null, cancellationToken);
+        await channel.ExchangeDeclareAsync(
             exchangeName,
             exchangeOptions.Type,
             exchangeOptions.Durable,
             exchangeOptions.AutoDelete,
-            null);
+            cancellationToken: cancellationToken);
         logger.ExchangeInitialized(exchangeName, exchangeOptions.Type, exchangeOptions.Durable);
         return channel;
     }
 
-    private void ConnectionOnCallbackException(object? sender, CallbackExceptionEventArgs e)
+    private Task ConnectionOnCallbackException(object sender, CallbackExceptionEventArgs e)
     {
         logger.ErrorConnectionCallback(e.Exception);
+        return Task.CompletedTask;
     }
 
     private void CheckDisposed()
@@ -243,10 +273,10 @@ public sealed class RabbitService : IDisposable
     /// back to the queue.
     /// Consuming of messages is stopped by disposing this object.
     /// </summary>
-    private sealed class MessageConsumer : IDisposable
+    private sealed class MessageConsumer : IAsyncDisposable
     {
-        private readonly IModel channel;
-        private readonly Func<Message, Task<ProcessMessageResult>> process;
+        private readonly IChannel channel;
+        private readonly Func<Message, CancellationToken, Task<ProcessMessageResult>> process;
         private readonly string exchangeName;
         private readonly RabbitQueueOptions? queueOptions;
         private readonly ILogger<RabbitService> logger;
@@ -256,8 +286,8 @@ public sealed class RabbitService : IDisposable
         private string? consumerTag;
 
         public MessageConsumer(
-            IModel channel,
-            Func<Message, Task<ProcessMessageResult>> process,
+            IChannel channel,
+            Func<Message, CancellationToken, Task<ProcessMessageResult>> process,
             string exchangeName,
             RabbitQueueOptions? queueOptions,
             ILogger<RabbitService> logger)
@@ -269,46 +299,46 @@ public sealed class RabbitService : IDisposable
             this.logger = logger;
         }
 
-        public void Initialize()
+        public async ValueTask Initialize(CancellationToken cancellationToken)
         {
             var durable = queueOptions?.Durable ?? false;
             var autoDelete = queueOptions?.AutoDelete ?? true;
-            var queue = channel.QueueDeclare(
+            var queue = await channel.QueueDeclareAsync(
                 queueOptions?.Name ?? string.Empty,
                 durable,
                 autoDelete,
                 autoDelete,
-                null);
+                cancellationToken: cancellationToken);
             queueName = queue.QueueName;
             logger.QueueInitialized(queueName, durable);
 
-            channel.QueueBind(queueName, exchangeName, string.Empty);
+            await channel.QueueBindAsync(queueName, exchangeName, string.Empty, cancellationToken: cancellationToken);
             logger.QueueBound(queueName, exchangeName);
 
             // Receive only single message at time, so that it is returned to queue head
             // in case of error.
-            channel.BasicQos(0, 1, false);
+            await channel.BasicQosAsync(0, 1, false, cancellationToken);
 
             var consumer = new AsyncEventingBasicConsumer(channel);
-            consumer.Received += ConsumerOnReceived;
-            consumerTag = channel.BasicConsume(queueName, false, consumer);
+            consumer.ReceivedAsync += ConsumerOnReceived;
+            consumerTag = await channel.BasicConsumeAsync(queueName, false, consumer, cancellationToken);
 
             logger.ConsumerInitialized(exchangeName, queueName, consumerTag);
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             if (!disposed)
             {
                 if (consumerTag != null && channel.IsOpen)
                 {
-                    channel.BasicCancel(consumerTag);
+                    await channel.BasicCancelAsync(consumerTag);
                     logger.ConsumerStopped(exchangeName, queueName!, consumerTag);
                     consumerTag = null;
                 }
 
-                channel.Close();
-                channel.Dispose();
+                await channel.CloseAsync();
+                await channel.DisposeAsync();
                 disposed = true;
             }
         }
@@ -321,20 +351,20 @@ public sealed class RabbitService : IDisposable
                 logger.ConsumingMessage(exchangeName, queueName!, consumerTag!, e.BasicProperties, e.Body.Length);
 
                 var message = new Message(e.Body, e.BasicProperties, default);
-                var result = await process(message);
+                var result = await process(message, e.CancellationToken);
 
                 switch (result)
                 {
                     case ProcessMessageResult.Success:
-                        channel.BasicAck(e.DeliveryTag, false);
+                        await channel.BasicAckAsync(e.DeliveryTag, false, e.CancellationToken);
                         logger.MessageConsumed(exchangeName, queueName!, consumerTag!, e.BasicProperties, e.Body.Length);
                         break;
                     case ProcessMessageResult.Reject:
-                        channel.BasicReject(e.DeliveryTag, false);
+                        await channel.BasicRejectAsync(e.DeliveryTag, false, e.CancellationToken);
                         logger.MessageRejected(exchangeName, queueName!, consumerTag!, e.BasicProperties, e.Body.Length);
                         break;
                     case ProcessMessageResult.Requeue:
-                        channel.BasicNack(e.DeliveryTag, false, true);
+                        await channel.BasicNackAsync(e.DeliveryTag, false, true, e.CancellationToken);
                         logger.MessageRequeued(exchangeName, queueName!, consumerTag!, e.BasicProperties, e.Body.Length);
                         break;
                     default:
@@ -344,7 +374,7 @@ public sealed class RabbitService : IDisposable
             catch (Exception ex)
             {
                 logger.ErrorConsumingMessage(ex, exchangeName, queueName!, consumerTag!, e.BasicProperties, e.Body.Length);
-                channel.BasicNack(e.DeliveryTag, false, !e.Redelivered);
+                await channel.BasicNackAsync(e.DeliveryTag, false, !e.Redelivered, e.CancellationToken);
             }
         }
     }

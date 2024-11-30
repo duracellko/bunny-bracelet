@@ -25,7 +25,7 @@ public class RelayHostedService : IHostedService
     private readonly IOptions<RelayOptions> options;
     private readonly IOptions<RabbitOptions> rabbitOptions;
     private readonly ILogger<RelayHostedService> logger;
-    private readonly List<IDisposable> consumers = [];
+    private readonly List<IAsyncDisposable> consumers = [];
 
     public RelayHostedService(
         RabbitService rabbitService,
@@ -56,7 +56,7 @@ public class RelayHostedService : IHostedService
     public int ConsumersCount => consumers.Count;
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "On error continue setup of other endpoints.")]
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         logger.RelayServiceStarting();
 
@@ -70,9 +70,10 @@ public class RelayHostedService : IHostedService
                 {
                     try
                     {
-                        var consumer = rabbitService.ConsumeMessages(
-                            async message => await ProcessMessage(message, uri, exchangeName),
-                            endpoint.Queue);
+                        var consumer = await rabbitService.ConsumeMessages(
+                            async (message, ct) => await ProcessMessage(message, uri, exchangeName, ct),
+                            endpoint.Queue,
+                            cancellationToken);
                         consumers.Add(consumer);
                         logger.RelayEndpointConfigured(uri, exchangeName, endpoint.Queue?.Name);
                     }
@@ -89,12 +90,10 @@ public class RelayHostedService : IHostedService
         {
             logger.MissingOutboundExchange();
         }
-
-        return Task.CompletedTask;
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Dispose other consumers.")]
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
         logger.RelayServiceStopping();
         while (consumers.Count > 0)
@@ -105,7 +104,7 @@ public class RelayHostedService : IHostedService
 
             try
             {
-                consumer.Dispose();
+                await consumer.DisposeAsync();
             }
             catch (Exception ex)
             {
@@ -114,7 +113,6 @@ public class RelayHostedService : IHostedService
         }
 
         logger.RelayServiceStopped();
-        return Task.CompletedTask;
     }
 
     private static ByteArray? GetAuthenticationKey(RelayAuthenticationOptions authenticationOptions, int keyIndex)
@@ -130,7 +128,7 @@ public class RelayHostedService : IHostedService
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Requeue the message and retry deliver again.")]
-    private async Task<ProcessMessageResult> ProcessMessage(Message message, Uri endpoint, string exchangeName)
+    private async Task<ProcessMessageResult> ProcessMessage(Message message, Uri endpoint, string exchangeName, CancellationToken cancellationToken)
     {
         logger.RelayingMessage(endpoint, exchangeName, message.Properties, message.Body.Length);
 
@@ -145,7 +143,7 @@ public class RelayHostedService : IHostedService
             message = new Message(message.Body, message.Properties, timeProvider.GetUtcNow().UtcDateTime);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, MessageUri);
-            using var messageStream = await messageSerializer.ConvertMessageToStream(message);
+            using var messageStream = await messageSerializer.ConvertMessageToStream(message, cancellationToken);
 
             HMACSHA256? hmac = default;
             Stream? cryptoStream = default;
@@ -174,8 +172,8 @@ public class RelayHostedService : IHostedService
                 using var content = new StreamContent(requestStream);
                 request.Content = content;
 
-                var response = await httpClient.SendAsync(request);
-                responseContent = await response.Content.ReadAsStringAsync();
+                var response = await httpClient.SendAsync(request, cancellationToken);
+                responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
                 response.EnsureSuccessStatusCode();
             }
             finally
@@ -208,7 +206,7 @@ public class RelayHostedService : IHostedService
 
             // Delay returning of the message back to the queue, so that retry to forward the message
             // is done after some delay. This avoids excessive usage of CPU and network.
-            await Task.Delay(options.Value.RequeueDelay);
+            await Task.Delay(options.Value.RequeueDelay, cancellationToken);
             return ProcessMessageResult.Requeue;
         }
 

@@ -2,7 +2,7 @@
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-using RabbitMessage = (RabbitMQ.Client.IBasicProperties? properties, byte[] body);
+using RabbitMessage = (RabbitMQ.Client.IReadOnlyBasicProperties? properties, byte[] body);
 
 namespace BunnyBracelet.SystemTests;
 
@@ -10,97 +10,125 @@ namespace BunnyBracelet.SystemTests;
 /// This object manages connection to RabbitMQ and provides simple operations
 /// to publish and consume messages.
 /// </summary>
-internal sealed class RabbitConnection : IDisposable
+internal sealed class RabbitConnection : IAsyncDisposable
 {
-    private readonly Lazy<IConnection> connection;
-    private readonly Lazy<IModel> model;
     private readonly List<MessageConsumer> messageConsumers = [];
+    private IConnection? connection;
+    private IChannel? channel;
 
     public RabbitConnection(string uri)
     {
         Uri = new Uri(uri);
-        connection = new Lazy<IConnection>(CreateConnection);
-        model = new Lazy<IModel>(connection.Value.CreateModel);
     }
 
     public Uri Uri { get; }
 
-    public IConnection Connection => connection.Value;
-
-    public IModel Model => model.Value;
-
-    public IBasicProperties CreateProperties()
+    public static BasicProperties CreateProperties()
     {
-        var result = Model.CreateBasicProperties();
-        result.DeliveryMode = 1;
-        return result;
+        return new BasicProperties
+        {
+            DeliveryMode = DeliveryModes.Transient
+        };
     }
 
-    public void Publish(string exchange, IBasicProperties? properties, ReadOnlyMemory<byte> body)
+    public async ValueTask<IConnection> GetConnection()
     {
-        Model.BasicPublish(exchange, string.Empty, properties, body);
+        if (connection is null)
+        {
+            var connectionFactory = new ConnectionFactory
+            {
+                Uri = Uri
+            };
+            connection = await connectionFactory.CreateConnectionAsync();
+        }
+
+        return connection;
     }
 
-    public IProducerConsumerCollection<RabbitMessage> Consume(string exchange, string? queue = null)
+    public async ValueTask<IChannel> GetChannel()
     {
-        var model = Connection.CreateModel();
-        var messageConsumer = new MessageConsumer(model, exchange, queue);
-        messageConsumer.Initialize();
+        if (channel is null)
+        {
+            var connection = await GetConnection();
+            channel = await connection.CreateChannelAsync();
+        }
+
+        return channel;
+    }
+
+    public async Task Publish(string exchange, IReadOnlyBasicProperties? properties, ReadOnlyMemory<byte> body)
+    {
+        var channel = await GetChannel();
+
+        if (properties is not null)
+        {
+            var basicProperties = new BasicProperties(properties);
+            await channel.BasicPublishAsync(exchange, string.Empty, false, basicProperties, body);
+        }
+        else
+        {
+            await channel.BasicPublishAsync(exchange, string.Empty, false, body);
+        }
+    }
+
+    public async Task<IProducerConsumerCollection<RabbitMessage>> Consume(string exchange, string? queue = null)
+    {
+        var connection = await GetConnection();
+        var channel = await connection.CreateChannelAsync();
+        var messageConsumer = new MessageConsumer(channel, exchange, queue);
+        await messageConsumer.Initialize();
         messageConsumers.Add(messageConsumer);
         return messageConsumer.Queue;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        if (connection.IsValueCreated)
+        if (connection is not null)
         {
-            connection.Value.Close();
-            connection.Value.Dispose();
+            await connection.CloseAsync();
+            await connection.DisposeAsync();
         }
-    }
 
-    private IConnection CreateConnection()
-    {
-        var connectionFactory = new ConnectionFactory
+        if (channel is not null)
         {
-            Uri = Uri
-        };
-        return connectionFactory.CreateConnection();
+            await channel.DisposeAsync();
+        }
     }
 
     private sealed class MessageConsumer
     {
-        private readonly IModel model;
+        private readonly IChannel channel;
         private readonly string exchange;
         private readonly string? queueName;
         private readonly ConcurrentQueue<RabbitMessage> queue = new();
 
-        public MessageConsumer(IModel model, string exchange, string? queueName)
+        public MessageConsumer(IChannel channel, string exchange, string? queueName)
         {
-            this.model = model;
+            this.channel = channel;
             this.exchange = exchange;
             this.queueName = queueName;
         }
 
         public IProducerConsumerCollection<RabbitMessage> Queue => queue;
 
-        public void Initialize()
+        public async Task Initialize()
         {
-            var queue = model.QueueDeclare(
+            var queue = await channel.QueueDeclareAsync(
                 queueName ?? string.Empty,
                 !string.IsNullOrEmpty(queueName),
                 exclusive: string.IsNullOrEmpty(queueName),
                 autoDelete: string.IsNullOrEmpty(queueName));
-            model.QueueBind(queue.QueueName, exchange, string.Empty);
+            await channel.QueueBindAsync(queue.QueueName, exchange, string.Empty);
 
-            var consumer = new EventingBasicConsumer(model);
-            consumer.Received += ConsumerOnReceived;
-            model.BasicConsume(queue.QueueName, true, consumer);
+            var consumer = new AsyncEventingBasicConsumer(channel);
+            consumer.ReceivedAsync += ConsumerOnReceived;
+            await channel.BasicConsumeAsync(queue.QueueName, true, consumer);
         }
 
-        private void ConsumerOnReceived(object? sender, BasicDeliverEventArgs e)
+        private Task ConsumerOnReceived(object? sender, BasicDeliverEventArgs e)
         {
             queue.Enqueue((e.BasicProperties, e.Body.ToArray()));
+            return Task.CompletedTask;
         }
     }
 }

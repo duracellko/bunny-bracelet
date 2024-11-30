@@ -11,13 +11,13 @@ public class MessageTest
     private static readonly DateTime Y2K38 = new(2038, 1, 19, 3, 14, 7, DateTimeKind.Unspecified);
 
     private static readonly byte[] TestBody = Guid.NewGuid().ToByteArray();
-    private static readonly BasicPropertiesMock TestBasicProperties = CreateBasicProperties();
+    private static readonly BasicProperties TestBasicProperties = CreateBasicProperties();
 
     public static IEnumerable<object?[]> EqualsTestData { get; } =
     [
         [null, null, default(DateTime)],
         [null, null, TestTimestamp],
-        [new ReadOnlyMemory<byte>(null), new BasicPropertiesMock(), TestTimestamp],
+        [new ReadOnlyMemory<byte>(null), new BasicProperties(), TestTimestamp],
         [new ReadOnlyMemory<byte>([]), CreateBasicProperties(), DateTime.SpecifyKind(TestTimestamp, DateTimeKind.Unspecified)],
         [new ReadOnlyMemory<byte>([1, 2, 3]), TestBasicProperties, UnixEpoch],
         [new ReadOnlyMemory<byte>(TestBody), null, Y2K38],
@@ -31,9 +31,9 @@ public class MessageTest
         [new ReadOnlyMemory<byte>(new byte[0]), null, UnixEpoch, new ReadOnlyMemory<byte>([]), null, UnixEpoch],
         [new ReadOnlyMemory<byte>([1, 2, 3]), null, TestTimestamp, new ReadOnlyMemory<byte>([1, 2, 3]), null, TestTimestamp],
         [new ReadOnlyMemory<byte>(Guid.NewGuid().ToByteArray()), null, default(DateTime), new ReadOnlyMemory<byte>(Guid.NewGuid().ToByteArray()), null, default(DateTime)],
-        [new ReadOnlyMemory<byte>(null), null, TestTimestamp, new ReadOnlyMemory<byte>(null), new BasicPropertiesMock(), TestTimestamp],
-        [new ReadOnlyMemory<byte>([]), new BasicPropertiesMock(), Y2K38, new ReadOnlyMemory<byte>([]), new BasicPropertiesMock(), Y2K38],
-        [new ReadOnlyMemory<byte>([]), new BasicPropertiesMock(), UnixEpoch, new ReadOnlyMemory<byte>([]), CreateBasicProperties(), UnixEpoch],
+        [new ReadOnlyMemory<byte>(null), null, TestTimestamp, new ReadOnlyMemory<byte>(null), new BasicProperties(), TestTimestamp],
+        [new ReadOnlyMemory<byte>([]), new BasicProperties(), Y2K38, new ReadOnlyMemory<byte>([]), new BasicProperties(), Y2K38],
+        [new ReadOnlyMemory<byte>([]), new BasicProperties(), UnixEpoch, new ReadOnlyMemory<byte>([]), CreateBasicProperties(), UnixEpoch],
         [new ReadOnlyMemory<byte>([127]), CreateBasicProperties(), TestTimestamp, new ReadOnlyMemory<byte>([1, 2, 3]), CreateBasicProperties(), TestTimestamp],
         [null, null, default(DateTime), null, null, TestTimestamp],
         [new ReadOnlyMemory<byte>([]), null, UnixEpoch, new ReadOnlyMemory<byte>([]), null, TestTimestamp],
@@ -66,7 +66,7 @@ public class MessageTest
     public void Constructor_InstancesAsValues_PropertiesAreSet()
     {
         var body = new ReadOnlyMemory<byte>([1, 2, 3]);
-        var properties = new BasicPropertiesMock();
+        var properties = new BasicProperties();
         var timestamp = DateTime.UtcNow;
 
         var result = new Message(body, properties, timestamp);
@@ -213,7 +213,7 @@ public class MessageTest
     [TestMethod]
     public void Equals_SameArrayAndNewMemory_ReturnsFalse()
     {
-        var properties = new BasicPropertiesMock();
+        var properties = new BasicProperties();
         var array = new byte[] { 1, 2, 3 };
         var target1 = new Message(new ReadOnlyMemory<byte>(array), properties, default);
         var target2 = new Message(array, properties, default);
@@ -257,7 +257,7 @@ public class MessageTest
     public void Equals_DefaultAndDefaultInstances_ReturnsFalse()
     {
         var target1 = default(Message);
-        var target2 = new Message(Array.Empty<byte>(), new BasicPropertiesMock(), default);
+        var target2 = new Message(Array.Empty<byte>(), new BasicProperties(), default);
 
         Assert.IsFalse(target1.Equals(target2));
         Assert.IsFalse(target2.Equals(target1));
@@ -270,13 +270,13 @@ public class MessageTest
         Assert.AreNotEqual(target2.GetHashCode(), target1.GetHashCode());
     }
 
-    private static BasicPropertiesMock CreateBasicProperties()
+    private static BasicProperties CreateBasicProperties()
     {
-        return new BasicPropertiesMock
+        return new BasicProperties
         {
             MessageId = Guid.NewGuid().ToString(),
             Type = "Test",
-            Headers = new Dictionary<string, object>()
+            Headers = new Dictionary<string, object?>()
             {
                 { "TestHeader", Array.Empty<int>() }
             }

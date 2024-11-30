@@ -10,7 +10,7 @@ namespace BunnyBracelet;
 /// </summary>
 public readonly struct Message : IEquatable<Message>
 {
-    public Message(ReadOnlyMemory<byte> body, IBasicProperties? properties, DateTime timestamp)
+    public Message(ReadOnlyMemory<byte> body, IReadOnlyBasicProperties? properties, DateTime timestamp)
     {
         if (timestamp.Kind == DateTimeKind.Local)
         {
@@ -24,7 +24,7 @@ public readonly struct Message : IEquatable<Message>
 
     public ReadOnlyMemory<byte> Body { get; }
 
-    public IBasicProperties? Properties { get; }
+    public IReadOnlyBasicProperties? Properties { get; }
 
     public DateTime Timestamp { get; }
 
