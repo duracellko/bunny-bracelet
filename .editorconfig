@@ -8,6 +8,7 @@ trim_trailing_whitespace = true
 insert_final_newline = true
 
 [*.cs]
+dotnet_analyzer_diagnostic.category-Style.severity = error
 dotnet_sort_system_directives_first = true
 dotnet_style_prefer_conditional_expression_over_assignment = false
 
