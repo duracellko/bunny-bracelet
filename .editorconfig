@@ -36,6 +36,7 @@ dotnet_diagnostic.SA1633.severity = none
 dotnet_diagnostic.IDE0022.severity = none
 dotnet_diagnostic.IDE0046.severity = none
 dotnet_diagnostic.IDE0058.severity = none
+dotnet_diagnostic.IDE0305.severity = none
 
 [*.{csproj,shproj,projitems,props,targets}]
 indent_size = 2

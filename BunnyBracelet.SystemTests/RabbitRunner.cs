@@ -20,7 +20,7 @@ namespace BunnyBracelet.SystemTests;
 /// </remarks>
 internal sealed class RabbitRunner : IDisposable
 {
-    private const string Image = "rabbitmq:3.13";
+    private const string Image = "rabbitmq:4.1";
     private const int RabbitMQPort = 5672;
 
     private const string ContainerNamePrefix = "rabbitmq";
