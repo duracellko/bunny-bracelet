@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
@@ -20,16 +21,22 @@ namespace BunnyBracelet.SystemTests;
 /// </remarks>
 internal sealed class RabbitRunner : IDisposable
 {
-    private const string Image = "rabbitmq:3.13";
+    private const string Image = "rabbitmq:4.1";
     private const int RabbitMQPort = 5672;
 
     private const string ContainerNamePrefix = "rabbitmq";
     private const string EnvironmentLabel = "BunnyBracelet-Environment";
     private const string PortLabel = "BunnyBracelet-Port";
     private const string NetworkName = "bridge";
+    private const string ConfigurationFileName = "BunnyTest.conf";
+    private const string ContainerConfigurationPath = "/etc/rabbitmq/conf.d/BunnyTest.conf";
+
+    // Increase maximum message size for TooLargeMessage test
+    private const string Configuration = "max_message_size = 33554432";
 
     private static readonly SemaphoreSlim PullImageSemaphore = new(1, 1);
     private static readonly Dictionary<int, string> EnvironmentPasswords = [];
+    private static readonly Lazy<string> ConfigurationPathProvider = new(GetConfigurationPath);
 
     private readonly Lazy<DockerClient> dockerClient = new(CreateDockerClient);
     private readonly string containerName;
@@ -59,6 +66,8 @@ internal sealed class RabbitRunner : IDisposable
     }
 
     public static string EnvironmentId { get; private set; } = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
+
+    public static string ConfigurationPath => ConfigurationPathProvider.Value;
 
     public int Port { get; }
 
@@ -206,6 +215,18 @@ internal sealed class RabbitRunner : IDisposable
         return result;
     }
 
+    private static string GetConfigurationPath()
+    {
+        var assembly = typeof(RabbitRunner).Assembly;
+        var testDirectory = Path.GetDirectoryName(assembly.Location);
+        return Path.Combine(testDirectory!, ConfigurationFileName);
+    }
+
+    private static async Task CreateConfigurationFile()
+    {
+        await File.WriteAllTextAsync(ConfigurationPath, Configuration);
+    }
+
     private async Task PullImage()
     {
         // Do not pull image in parallel to avoid multiple downloads.
@@ -271,8 +292,11 @@ internal sealed class RabbitRunner : IDisposable
         }
     }
 
+    [SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1513:Closing brace should be followed by blank line", Justification = "There shouldn't be blank line before end of list.")]
     private async Task<ContainerStatus> CreateContainer()
     {
+        await CreateConfigurationFile();
+
         var createContainerParameters = new CreateContainerParameters
         {
             Image = Image,
@@ -297,7 +321,17 @@ internal sealed class RabbitRunner : IDisposable
                             }
                         }
                     }
-                }
+                },
+                Mounts =
+                [
+                    new()
+                    {
+                        Type = "bind",
+                        Source = ConfigurationPath,
+                        Target = ContainerConfigurationPath,
+                        ReadOnly = true
+                    }
+                ]
             },
             Env =
             [
