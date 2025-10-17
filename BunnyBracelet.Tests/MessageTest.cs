@@ -80,7 +80,7 @@ public class MessageTest
     [TestMethod]
     public void Constructor_LocalTime_ArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => new Message(TestBody, TestBasicProperties, DateTime.Now));
+        Assert.Throws<ArgumentException>(() => new Message(TestBody, TestBasicProperties, DateTime.Now));
     }
 
     [TestMethod]

@@ -69,24 +69,24 @@ internal static class MessageAssert
 
     private static void AreHeadersEqual(IDictionary<string, object?> expected, IDictionary<string, object?> actual)
     {
-        Assert.AreEqual(expected.Count, actual.Count, "Headers " + nameof(expected.Count) + " is different.");
+        Assert.HasCount(expected.Count, actual, "Headers " + nameof(expected.Count) + " is different.");
 
         foreach (var keyValuePair in expected)
         {
             var actualValue = actual[keyValuePair.Key];
             if (keyValuePair.Value is null)
             {
-                Assert.IsNull(actualValue, "Header '{0}' should be null.", keyValuePair.Key);
+                Assert.IsNull(actualValue, $"Header '{keyValuePair.Key}' should be null.");
             }
             else
             {
-                Assert.IsNotNull(actualValue, "Header '{0}' should not be null.", keyValuePair.Key);
-                Assert.AreEqual(keyValuePair.Value.GetType(), actualValue.GetType(), "Header '{0}' has different type.", keyValuePair.Key);
+                Assert.IsNotNull(actualValue, $"Header '{keyValuePair.Key}' should not be null.");
+                Assert.AreEqual(keyValuePair.Value.GetType(), actualValue.GetType(), $"Header '{keyValuePair.Key}' has different type.");
 
                 if (keyValuePair.Value is byte[] valueBytes)
                 {
                     var actualValueBytes = (byte[])actualValue;
-                    CollectionAssert.AreEqual(valueBytes, actualValueBytes, "Header '{0}' has different values.", keyValuePair.Key);
+                    CollectionAssert.AreEqual(valueBytes, actualValueBytes, $"Header '{keyValuePair.Key}' has different values.");
                 }
                 else if (keyValuePair.Value is IReadOnlyList<object> valueList)
                 {
@@ -95,7 +95,7 @@ internal static class MessageAssert
                 }
                 else
                 {
-                    Assert.AreEqual(keyValuePair.Value, actualValue, "Header '{0}' has different values.", keyValuePair.Key);
+                    Assert.AreEqual(keyValuePair.Value, actualValue, $"Header '{keyValuePair.Key}' has different values.");
                 }
             }
         }
@@ -103,20 +103,20 @@ internal static class MessageAssert
 
     private static void AreHeadersListsEqual(IReadOnlyList<object> expected, IReadOnlyList<object?> actual, string key)
     {
-        Assert.AreEqual(expected.Count, actual.Count, "Header '{0}' list" + nameof(expected.Count) + " is different.", key);
+        Assert.HasCount(expected.Count, actual, "Header '{0}' list" + nameof(expected.Count) + " is different.", key);
 
         for (var i = 0; i < expected.Count; i++)
         {
             var expectedValue = expected[i];
             var actualValue = actual[i];
 
-            Assert.IsNotNull(actualValue, "Header `{0}` list value should not be null.", key);
-            Assert.AreEqual(expectedValue.GetType(), actualValue.GetType(), "Header '{0}' list value has different type.", key);
+            Assert.IsNotNull(actualValue, $"Header `{key}` list value should not be null.");
+            Assert.AreEqual(expectedValue.GetType(), actualValue.GetType(), $"Header '{key}' list value has different type.");
 
             if (expectedValue is byte[] valueBytes)
             {
                 var actualValueBytes = (byte[])actualValue;
-                CollectionAssert.AreEqual(valueBytes, actualValueBytes, "Header '{0}' list value has different values.", key);
+                CollectionAssert.AreEqual(valueBytes, actualValueBytes, $"Header '{key}' list value has different values.");
             }
             else if (expectedValue is IReadOnlyList<object> valueList)
             {
@@ -125,7 +125,7 @@ internal static class MessageAssert
             }
             else
             {
-                Assert.AreEqual(expectedValue, actualValue, "Header '{0}' list value has different values.", key);
+                Assert.AreEqual(expectedValue, actualValue, $"Header '{key}' list value has different values.");
             }
         }
     }

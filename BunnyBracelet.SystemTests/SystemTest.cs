@@ -202,7 +202,7 @@ public class SystemTest
                 messageDictionary.Remove(messageId);
             }
 
-            Assert.AreEqual(0, messageDictionary.Count, "All messages should be in queue 3.");
+            Assert.IsEmpty(messageDictionary, "All messages should be in queue 3.");
 
             // Verify that messages were received in correct order.
             var messageIds = messageResults.Select(m => m.properties!.MessageId!)
@@ -459,7 +459,7 @@ public class SystemTest
             var channel1 = await connection1.GetChannel();
             var queueMessageCount = (int)await channel1.MessageCountAsync(endpoint.QueueName);
             Assert.AreEqual(0, queueMessageCount, "Outbound queue should be empty.");
-            Assert.AreEqual(0, queue2.Count, "Inbound queue should be empty.");
+            Assert.IsEmpty(queue2, "Inbound queue should be empty.");
 
             await AssertHealthy(bunny1, bunny2);
         }
@@ -1042,7 +1042,7 @@ public class SystemTest
             await connection1.Publish(bunny1.OutboundExchange.Name!, properties1, messageContent);
 
             await AssertMessageInQueue(queue3, (properties1, messageContent), 1);
-            Assert.AreEqual(0, queue2.Count);
+            Assert.IsEmpty(queue2);
 
             await AssertHealthy(bunny1, bunny3);
             await AssertUnhealthy(bunny2);
@@ -1137,8 +1137,8 @@ public class SystemTest
             MessageAssert.AreBodiesEqual(messageContent, bodyResult);
 
             await Task.Delay(100);
-            Assert.AreEqual(0, queue2.Count);
-            Assert.AreEqual(0, queue3.Count);
+            Assert.IsEmpty(queue2);
+            Assert.IsEmpty(queue3);
         }
         finally
         {
@@ -1378,7 +1378,7 @@ public class SystemTest
             for (var i = 1; i < collection.Count; i++)
             {
                 Assert.IsNotNull(collection[i]);
-                Assert.IsTrue(collection[i - 1].CompareTo(collection[i]) < 0, "Unexpected order '{0}' > '{1}'.", collection[i - 1], collection[i]);
+                Assert.IsGreaterThan(collection[i - 1], collection[i], $"Unexpected order '{collection[i - 1]}' > '{collection[i]}'.");
             }
         }
     }

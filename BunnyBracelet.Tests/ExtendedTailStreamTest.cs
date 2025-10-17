@@ -87,7 +87,7 @@ public class ExtendedTailStreamTest
     [TestMethod]
     public void Constructor_StreamIsNull_ArgumentNullException()
     {
-        Assert.ThrowsException<ArgumentNullException>(() => new ExtendedTailStream(null!, 1));
+        Assert.Throws<ArgumentNullException>(() => new ExtendedTailStream(null!, 1));
     }
 
     [TestMethod]
@@ -95,7 +95,7 @@ public class ExtendedTailStreamTest
     {
         var stream = new MemoryStream(120);
 
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => new ExtendedTailStream(stream, -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ExtendedTailStream(stream, -1));
     }
 
     [TestMethod]
@@ -104,8 +104,8 @@ public class ExtendedTailStreamTest
     {
         var (data, tail) = await ExtendTailAsync([], tailSize);
 
-        Assert.AreEqual(0, data.Length);
-        Assert.AreEqual(tailSize, tail.Length);
+        Assert.IsEmpty(data);
+        Assert.HasCount(tailSize, tail);
         AssertBytesAreZero(tail);
     }
 
@@ -117,9 +117,9 @@ public class ExtendedTailStreamTest
 
         var result = await ExtendTailAsync(data, tailSize);
 
-        Assert.AreEqual(dataSize - tailSize, result.data.Length);
+        Assert.HasCount(dataSize - tailSize, result.data);
         CollectionAssert.AreEqual(data.SkipLast(tailSize).ToArray(), result.data);
-        Assert.AreEqual(tailSize, result.tail.Length);
+        Assert.HasCount(tailSize, result.tail);
         CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.tail);
     }
 
@@ -131,8 +131,8 @@ public class ExtendedTailStreamTest
 
         var result = await ExtendTailAsync(data, tailSize);
 
-        Assert.AreEqual(0, result.data.Length);
-        Assert.AreEqual(tailSize, result.tail.Length);
+        Assert.IsEmpty(result.data);
+        Assert.HasCount(tailSize, result.tail);
         CollectionAssert.AreEqual(data, result.tail.Take(dataSize).ToArray());
         AssertBytesAreZero(data, tailSize);
     }
@@ -146,9 +146,9 @@ public class ExtendedTailStreamTest
 
         var result = await ExtendTailAsync(data, 0, replaceData);
 
-        Assert.AreEqual(dataSize + replaceSize, result.data.Length);
+        Assert.HasCount(dataSize + replaceSize, result.data);
         CollectionAssert.AreEqual(data.Concat(replaceData).ToArray(), result.data);
-        Assert.AreEqual(0, result.tail.Length);
+        Assert.IsEmpty(result.tail);
     }
 
     [TestMethod]
@@ -160,9 +160,9 @@ public class ExtendedTailStreamTest
 
         var result = await ExtendTailAsync(data, tailSize, replaceData);
 
-        Assert.AreEqual(dataSize - tailSize + replaceSize, result.data.Length);
+        Assert.HasCount(dataSize - tailSize + replaceSize, result.data);
         CollectionAssert.AreEqual(data.SkipLast(tailSize).Concat(replaceData).ToArray(), result.data);
-        Assert.AreEqual(tailSize, result.tail.Length);
+        Assert.HasCount(tailSize, result.tail);
         CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.tail);
     }
 
@@ -173,7 +173,7 @@ public class ExtendedTailStreamTest
         using var stream = new MemoryStream(120);
         using var target = new ExtendedTailStream(stream, 0);
 
-        await Assert.ThrowsExceptionAsync<ArgumentNullException>(async () => await target.ReadAsync(null!, 0, 10));
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await target.ReadAsync(null!, 0, 10));
     }
 
     [TestMethod]
@@ -185,7 +185,7 @@ public class ExtendedTailStreamTest
         using var target = new ExtendedTailStream(stream, 0);
 
         var buffer = new byte[50];
-        await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(async () => await target.ReadAsync(buffer, index, count));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await target.ReadAsync(buffer, index, count));
     }
 
     [TestMethod]
@@ -194,8 +194,8 @@ public class ExtendedTailStreamTest
     {
         var (data, tail) = ExtendTail([], tailSize);
 
-        Assert.AreEqual(0, data.Length);
-        Assert.AreEqual(tailSize, tail.Length);
+        Assert.IsEmpty(data);
+        Assert.HasCount(tailSize, tail);
         AssertBytesAreZero(tail);
     }
 
@@ -207,9 +207,9 @@ public class ExtendedTailStreamTest
 
         var result = ExtendTail(data, tailSize);
 
-        Assert.AreEqual(dataSize - tailSize, result.data.Length);
+        Assert.HasCount(dataSize - tailSize, result.data);
         CollectionAssert.AreEqual(data.SkipLast(tailSize).ToArray(), result.data);
-        Assert.AreEqual(tailSize, result.tail.Length);
+        Assert.HasCount(tailSize, result.tail);
         CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.tail);
     }
 
@@ -221,8 +221,8 @@ public class ExtendedTailStreamTest
 
         var result = ExtendTail(data, tailSize);
 
-        Assert.AreEqual(0, result.data.Length);
-        Assert.AreEqual(tailSize, result.tail.Length);
+        Assert.IsEmpty(result.data);
+        Assert.HasCount(tailSize, result.tail);
         CollectionAssert.AreEqual(data, result.tail.Take(dataSize).ToArray());
         AssertBytesAreZero(data, tailSize);
     }
@@ -236,9 +236,9 @@ public class ExtendedTailStreamTest
 
         var result = ExtendTail(data, 0, replaceData);
 
-        Assert.AreEqual(dataSize + replaceSize, result.data.Length);
+        Assert.HasCount(dataSize + replaceSize, result.data);
         CollectionAssert.AreEqual(data.Concat(replaceData).ToArray(), result.data);
-        Assert.AreEqual(0, result.tail.Length);
+        Assert.IsEmpty(result.tail);
     }
 
     [TestMethod]
@@ -250,9 +250,9 @@ public class ExtendedTailStreamTest
 
         var result = ExtendTail(data, tailSize, replaceData);
 
-        Assert.AreEqual(dataSize - tailSize + replaceSize, result.data.Length);
+        Assert.HasCount(dataSize - tailSize + replaceSize, result.data);
         CollectionAssert.AreEqual(data.SkipLast(tailSize).Concat(replaceData).ToArray(), result.data);
-        Assert.AreEqual(tailSize, result.tail.Length);
+        Assert.HasCount(tailSize, result.tail);
         CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.tail);
     }
 
@@ -262,7 +262,7 @@ public class ExtendedTailStreamTest
         using var stream = new MemoryStream(120);
         using var target = new ExtendedTailStream(stream, 0);
 
-        Assert.ThrowsException<ArgumentNullException>(() => target.Read(null!, 0, 10));
+        Assert.Throws<ArgumentNullException>(() => target.Read(null!, 0, 10));
     }
 
     [TestMethod]
@@ -273,7 +273,7 @@ public class ExtendedTailStreamTest
         using var target = new ExtendedTailStream(stream, 0);
 
         var buffer = new byte[50];
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => target.Read(buffer, index, count));
+        Assert.Throws<ArgumentOutOfRangeException>(() => target.Read(buffer, index, count));
     }
 
     [TestMethod]
@@ -285,8 +285,8 @@ public class ExtendedTailStreamTest
         target.Close();
 
         var buffer = new byte[50];
-        Assert.ThrowsException<ObjectDisposedException>(() => stream.Read(buffer));
-        await Assert.ThrowsExceptionAsync<ObjectDisposedException>(async () => await stream.ReadAsync(buffer));
+        Assert.Throws<ObjectDisposedException>(() => stream.Read(buffer));
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await stream.ReadAsync(buffer));
     }
 
     [TestMethod]
@@ -297,7 +297,7 @@ public class ExtendedTailStreamTest
 
         target.Close();
 
-        Assert.ThrowsException<ObjectDisposedException>(() => stream.ReadByte());
+        Assert.Throws<ObjectDisposedException>(() => stream.ReadByte());
     }
 
     [TestMethod]
@@ -309,8 +309,8 @@ public class ExtendedTailStreamTest
         await target.DisposeAsync();
 
         var buffer = new byte[50];
-        Assert.ThrowsException<ObjectDisposedException>(() => stream.Read(buffer));
-        await Assert.ThrowsExceptionAsync<ObjectDisposedException>(async () => await stream.ReadAsync(buffer));
+        Assert.Throws<ObjectDisposedException>(() => stream.Read(buffer));
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await stream.ReadAsync(buffer));
     }
 
     [TestMethod]
@@ -321,7 +321,7 @@ public class ExtendedTailStreamTest
 
         target.Dispose();
 
-        Assert.ThrowsException<ObjectDisposedException>(() => stream.ReadByte());
+        Assert.Throws<ObjectDisposedException>(() => stream.ReadByte());
     }
 
     private static async Task<TailResult> ExtendTailAsync(byte[] data, int tailSize)

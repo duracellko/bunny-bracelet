@@ -249,7 +249,7 @@ public class MessageSerializerTest
         var messageBytes = new byte[serializedMessage.Length - 1];
         serializedMessage.AsSpan()[1..].CopyTo(messageBytes);
 
-        await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
+        await Assert.ThrowsAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
 
     [TestMethod]
@@ -261,7 +261,7 @@ public class MessageSerializerTest
         var messageBytes = new byte[serializedMessage.Length - 1];
         serializedMessage.AsSpan()[..^1].CopyTo(messageBytes);
 
-        await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
+        await Assert.ThrowsAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
 
     [TestMethod]
@@ -276,7 +276,7 @@ public class MessageSerializerTest
         // Check there was no overflow
         Assert.AreNotEqual(0, messageBytes[messageBytes.Length - message.Body.Length - 5]);
 
-        await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
+        await Assert.ThrowsAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
 
     [TestMethod]
@@ -289,9 +289,9 @@ public class MessageSerializerTest
         messageBytes[messageBytes.Length - message.Body.Length - 5] -= 2;
 
         // Check there was no overflow
-        Assert.IsTrue(messageBytes[messageBytes.Length - message.Body.Length - 5] < 254);
+        Assert.IsLessThan(254, messageBytes[messageBytes.Length - message.Body.Length - 5]);
 
-        await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
+        await Assert.ThrowsAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
 
     [TestMethod]
@@ -305,7 +305,7 @@ public class MessageSerializerTest
         var newMessageIdSize = message.Body.Length * 2;
         BinaryPrimitives.WriteInt32LittleEndian(messageBytes.AsSpan()[15..], newMessageIdSize);
 
-        await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
+        await Assert.ThrowsAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
 
     [TestMethod]
@@ -318,7 +318,7 @@ public class MessageSerializerTest
         // 1 bytes = property, 1 byte - MessageId property, 4 bytes - string length
         messageBytes[22] = 0;
 
-        await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
+        await Assert.ThrowsAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
 
     [TestMethod]
@@ -331,7 +331,7 @@ public class MessageSerializerTest
         // 1 bytes = property, 1 byte - MessageId property, 4 bytes - string length
         messageBytes[19] = 0;
 
-        await Assert.ThrowsExceptionAsync<MessageException>(() => DeserializeMessage(messageBytes));
+        await Assert.ThrowsAsync<MessageException>(() => DeserializeMessage(messageBytes));
     }
 
     [TestMethod]
