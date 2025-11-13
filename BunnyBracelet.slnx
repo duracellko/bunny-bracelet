@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Project Path="BunnyBracelet/BunnyBracelet.csproj" />
+  <Project Path="BunnyBracelet.Tests/BunnyBracelet.Tests.csproj" />
+  <Project Path="BunnyBracelet.SystemTests/BunnyBracelet.SystemTests.csproj" />
+</Solution>

@@ -36,7 +36,7 @@ Bunny Bracelet is natively supported on Linux (x64), Windows (x64) and any platf
 
 #### Other platforms
 
-- Installed [ASP.NET Core 8.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0).
+- Installed [ASP.NET Core 10.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 
 ### Docker
 
