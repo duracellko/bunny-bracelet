@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PublishAot>true</PublishAot>
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
     <ContainerRepository>duracellko/bunny-bracelet</ContainerRepository>
     <ContainerImageTagVersion>$([System.Version]::Parse($(Version)).ToString(2))</ContainerImageTagVersion>
     <ContainerImageTags>$(FileVersion);$(ContainerImageTagVersion);latest</ContainerImageTags>
-    <ContainerFamily>bookworm-slim</ContainerFamily>
+    <ContainerFamily>noble</ContainerFamily>
     <Title>$(Product)</Title>
     <Description>Bunny Bracelet program relays messages between multiple RabbitMQ instances over HTTP protocol.</Description>
     <NoWarn>$(NoWarn);IL2104</NoWarn>

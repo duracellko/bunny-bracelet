@@ -4,9 +4,9 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Docker.DotNet" Version="3.125.15" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
-    <PackageVersion Include="MSTest" Version="4.0.1" />
-    <PackageVersion Include="RabbitMQ.Client" Version="7.1.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="MSTest" Version="4.0.2" />
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.0" />
   </ItemGroup>
   <ItemGroup>
     <GlobalPackageReference Include="StyleCop.Analyzers" Version="1.1.118" />

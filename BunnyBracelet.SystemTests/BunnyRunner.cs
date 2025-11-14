@@ -94,11 +94,11 @@ internal sealed class BunnyRunner : IAsyncDisposable
     {
         var inboundExchangeSettings = new ExchangeSettings
         {
-            Name = inboundExchange ?? DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
+            Name = inboundExchange ?? (DefaultInboundExchangePrefix + Guid.NewGuid().ToString())
         };
         var outboundExchangeSettings = new ExchangeSettings
         {
-            Name = outboundExchange ?? DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
+            Name = outboundExchange ?? (DefaultOutboundExchangePrefix + Guid.NewGuid().ToString())
         };
         var endpoints = new List<EndpointSettings>();
         if (endpoint is not null)
@@ -134,11 +134,11 @@ internal sealed class BunnyRunner : IAsyncDisposable
     {
         var inboundExchangeSettings = new ExchangeSettings
         {
-            Name = inboundExchange ?? DefaultInboundExchangePrefix + Guid.NewGuid().ToString()
+            Name = inboundExchange ?? (DefaultInboundExchangePrefix + Guid.NewGuid().ToString())
         };
         var outboundExchangeSettings = new ExchangeSettings
         {
-            Name = outboundExchange ?? DefaultOutboundExchangePrefix + Guid.NewGuid().ToString()
+            Name = outboundExchange ?? (DefaultOutboundExchangePrefix + Guid.NewGuid().ToString())
         };
         IReadOnlyList<EndpointSettings> endpointSettings = [];
         if (endpoints is not null)
@@ -262,7 +262,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         path = Path.GetFullPath(path);
 
         var filename = "BunnyBracelet";
-        var pivotBase = Configuration + "_net9.0";
+        var pivotBase = Configuration + "_net10.0";
         var pivot = pivotBase + "_linux-x64";
         if (OperatingSystem.IsWindows())
         {

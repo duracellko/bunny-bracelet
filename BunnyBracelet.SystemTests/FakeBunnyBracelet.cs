@@ -10,7 +10,6 @@ namespace BunnyBracelet.SystemTests;
 internal sealed class FakeBunnyBracelet : IAsyncDisposable
 {
     private WebApplication? application;
-    private Uri? uri;
 
     public int Port { get; }
 
@@ -23,18 +22,18 @@ internal sealed class FakeBunnyBracelet : IAsyncDisposable
                 return null;
             }
 
-            if (uri is null)
+            if (field is null)
             {
                 var server = (IServer)application.Services.GetRequiredService(typeof(IServer));
                 var serverAddressesFeature = server.Features.Get<IServerAddressesFeature>();
                 if (serverAddressesFeature != null)
                 {
                     var address = serverAddressesFeature.Addresses.Single();
-                    uri = new Uri(address);
+                    field = new Uri(address);
                 }
             }
 
-            return uri;
+            return field;
         }
     }
 
