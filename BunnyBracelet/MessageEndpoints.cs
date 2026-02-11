@@ -194,7 +194,7 @@ internal static class MessageEndpoints
     private static bool CheckAuthenticationCode(HMAC hmac, ByteArray authenticationCode)
     {
         var hmacCode = hmac.Hash;
-        return hmacCode is not null && hmacCode.AsSpan().SequenceEqual(authenticationCode);
+        return hmacCode is not null && CryptographicOperations.FixedTimeEquals(hmacCode, authenticationCode);
     }
 
     private static ILogger GetLogger(HttpContext context)
