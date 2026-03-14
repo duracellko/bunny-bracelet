@@ -24,12 +24,12 @@ jobs:
       matrix:
         runner:
         - ubuntu-22.04
-        - windows-2022
+        - windows-2025
 
     runs-on: ${{ matrix.runner }}
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - name: Setup .NET 10.0
       uses: actions/setup-dotnet@v5
       with:
@@ -131,37 +131,37 @@ jobs:
           }
         }
     - name: Publish tests
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: TestResults-${{ runner.os }}
         path: TestResults/*.trx
       if: ${{ !cancelled() }}
     - name: Publish BunnyBracelet-net10
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: BunnyBracelet-net10
         path: artifacts/staging/BunnyBracelet-net10/
       if: ${{ runner.os == 'Linux' }}
     - name: Publish BunnyBracelet-net8
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: BunnyBracelet-net8
         path: artifacts/staging/BunnyBracelet-net8/
       if: ${{ runner.os == 'Linux' }}
     - name: Publish BunnyBracelet-linux-x64
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: BunnyBracelet-linux-x64
         path: artifacts/staging/BunnyBracelet-linux-x64/
       if: ${{ runner.os == 'Linux' }}
     - name: Publish BunnyBracelet-win-x64
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: BunnyBracelet-win-x64
         path: artifacts/staging/BunnyBracelet-win-x64/
       if: ${{ runner.os == 'Windows' }}
     - name: Publish BunnyBracelet (container)
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: bunny-bracelet-container
         path: artifacts/staging/bunny-bracelet-container.tar.gz
@@ -183,7 +183,7 @@ jobs:
 
     steps:
     - name: Download artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
     - name: Create release artifacts
       run: |
         Compress-Archive -Path './BunnyBracelet-net10/*' -DestinationPath './BunnyBracelet-net10.zip'
@@ -222,7 +222,7 @@ jobs:
         bodyFile: ReleaseBody.md
         tag: ${{ github.ref_type == 'tag' && github.ref_name || steps.get_release_version.outputs.release_tag }}
     - name: Docker login
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         username: ${{ env.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
