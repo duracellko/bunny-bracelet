@@ -427,6 +427,7 @@ public class SystemTest
         {
             Uri = BunnyRunner.GetUri(5002),
             QueueName = "large-msg-queue-" + Guid.NewGuid().ToString(),
+            Durable = true,
             AutoDelete = false
         };
         await using var bunny1 = BunnyRunner.Create(5001, rabbit1.Uri, endpoints: [endpoint]);
@@ -585,7 +586,7 @@ public class SystemTest
     [TestMethod]
     public async Task StopDeliveryRetryAfterReachingMessageExpiration()
     {
-        const string expiration = "4200";
+        const string expiration = "4100";
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
 
@@ -635,14 +636,10 @@ public class SystemTest
             // T+3000: 3rd retry to relay message 1
             // T+3500: queue message 2
             // T+4000: 4th retry to relay message 1
-            // T+4100: restore network connestion of rabbit 2
-            // T+4200: message 1 expires
+            // T+4100: message 1 expires
+            // T+4200: restore network connestion of rabbit 2
             // T+5000: end pause after 4th retry relay message 1
-            // T+5000: relay message 2 - fails, because connection is not recovered yet
-            // T+5000: network connection recovery of bunny 2
-            // T+6000: 1st retry to relay message 2
-            //
-            // Note: Network recovery interval is 5 seconds
+            // T+5000: 1st retry to relay message 2
             await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
             await Task.WhenAll(
                 Task.Delay(3500),
@@ -650,7 +647,7 @@ public class SystemTest
                 Task.Run(async () => await AssertUnhealthy(bunny2)));
 
             await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
-            await Task.Delay(600);
+            await Task.Delay(700);
             await rabbit2.ConnectContainerToNetwork();
 
             await using (var connection2 = rabbit2.CreateConnection())
@@ -672,7 +669,7 @@ public class SystemTest
     [DataRow(1)]
     public async Task MessageExpirationIsCopiedToDestination(int keyIndex)
     {
-        const string expiration = "4200";
+        const string expiration = "4100";
         using var rabbit1 = new RabbitRunner(5673);
         using var rabbit2 = new RabbitRunner(5674);
 
@@ -724,15 +721,15 @@ public class SystemTest
                 Task.Run(async () => await AssertUnhealthy(bunny2)));
 
             await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
-            await Task.Delay(600);
+            await Task.Delay(700);
             await rabbit2.ConnectContainerToNetwork();
 
             await using (var connection2 = rabbit2.CreateConnection())
             {
-                // Start consuming messages at T+8000
-                // Notice that is after message 2 original expiration (T+7700)
-                // However, message 2 expiration is reset, when it is queue by bunny 2.
-                await Task.Delay(3900);
+                // Start consuming messages at T+7800
+                // Notice that is after message 2 original expiration (T+7600)
+                // However, message 2 expiration is reset, when it is queued by bunny 2.
+                await Task.Delay(3600);
                 var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
                 await AssertMessageInQueue(queue2, messages[2], 3);
             }
@@ -1058,7 +1055,7 @@ public class SystemTest
             {
                 Uri = port.HasValue ? BunnyRunner.GetUri(port.Value) : string.Empty,
                 QueueName = $"test-relay-{Guid.NewGuid()}",
-                Durable = false,
+                Durable = true,
                 AutoDelete = false
             };
         }
@@ -1151,7 +1148,7 @@ public class SystemTest
             {
                 Uri = BunnyRunner.GetUri(port),
                 QueueName = queue,
-                Durable = false,
+                Durable = true,
                 AutoDelete = false
             };
         }
