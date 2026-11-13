@@ -11,7 +11,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using RabbitMQ.Client;
 
 using ByteArray = byte[];
-using RabbitMessage = (RabbitMQ.Client.IReadOnlyBasicProperties? properties, byte[] body);
+using RabbitMessage = (RabbitMQ.Client.IReadOnlyBasicProperties? Properties, byte[] Body);
 
 namespace BunnyBracelet.SystemTests;
 
@@ -193,23 +193,23 @@ public class SystemTest
 
             var messageResults = await WaitForMessages(queue3, 2000);
 
-            var messageDictionary = messageList1.Concat(messageList2).ToDictionary(i => i.properties!.MessageId!);
+            var messageDictionary = messageList1.Concat(messageList2).ToDictionary(i => i.Properties!.MessageId!);
             foreach (var messageResult in messageResults)
             {
                 var messageId = GetMessageId(messageResult);
                 var (_, body) = messageDictionary[messageId];
-                CollectionAssert.AreEqual(body, messageResult.body);
+                CollectionAssert.AreEqual(body, messageResult.Body);
                 messageDictionary.Remove(messageId);
             }
 
             Assert.IsEmpty(messageDictionary, "All messages should be in queue 3.");
 
             // Verify that messages were received in correct order.
-            var messageIds = messageResults.Select(m => m.properties!.MessageId!)
+            var messageIds = messageResults.Select(m => m.Properties!.MessageId!)
                 .Where(id => id.StartsWith("MA-", StringComparison.Ordinal)).ToList();
             AssertCollectionIsOrdered(messageIds);
 
-            messageIds = messageResults.Select(m => m.properties!.MessageId!)
+            messageIds = messageResults.Select(m => m.Properties!.MessageId!)
                 .Where(id => id.StartsWith("MB-", StringComparison.Ordinal)).ToList();
             AssertCollectionIsOrdered(messageIds);
 
@@ -239,15 +239,15 @@ public class SystemTest
             {
                 foreach (var item in messages)
                 {
-                    await connection.Publish(exchange, item.properties, item.body);
+                    await connection.Publish(exchange, item.Properties, item.Body);
                 }
             });
         }
 
         static string GetMessageId(RabbitMessage message)
         {
-            Assert.IsNotNull(message.properties, "Message does not have basic properties.");
-            var messageId = message.properties.MessageId;
+            Assert.IsNotNull(message.Properties, "Message does not have basic properties.");
+            var messageId = message.Properties.MessageId;
             Assert.IsNotNull(messageId, "MessageId is null.");
             return messageId;
         }
@@ -385,14 +385,14 @@ public class SystemTest
                 await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
                 var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].Properties, messages[0].Body);
 
                 await AssertMessageInQueue(queue2, messages[0], 1);
             }
 
             await rabbit2.DisconnectContainerFromNetwork();
             await Task.Delay(200);
-            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].Properties, messages[1].Body);
             await Task.Delay(200);
 
             await AssertUnhealthy(bunny2);
@@ -403,7 +403,7 @@ public class SystemTest
             {
                 var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].Properties, messages[2].Body);
 
                 await AssertMessageInQueue(queue2, messages[1], 2);
                 await AssertMessageInQueue(queue2, messages[2], 3);
@@ -516,7 +516,7 @@ public class SystemTest
                     await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout, true);
                     var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                    await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+                    await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].Properties, messages[0].Body);
 
                     await AssertMessageInQueue(queue2, messages[0], 1);
                 }
@@ -525,7 +525,7 @@ public class SystemTest
                 await Task.Delay(200);
                 await rabbit2.StopContainer();
 
-                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].Properties, messages[1].Body);
 
                 await AssertHealthy(bunny1);
                 await AssertUnhealthy(bunny2);
@@ -544,7 +544,7 @@ public class SystemTest
 
             await using (var connection1 = rabbit1.CreateConnection())
             {
-                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].Properties, messages[2].Body);
 
                 await rabbit2.ConnectContainerToNetwork();
                 await rabbit2.StartContainer();
@@ -621,7 +621,7 @@ public class SystemTest
                 await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
                 var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].Properties, messages[0].Body);
 
                 await AssertMessageInQueue(queue2, messages[0], 1);
             }
@@ -640,13 +640,13 @@ public class SystemTest
             // T+4200: restore network connestion of rabbit 2
             // T+5000: end pause after 4th retry relay message 1
             // T+5000: 1st retry to relay message 2
-            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].Properties, messages[1].Body);
             await Task.WhenAll(
                 Task.Delay(3500),
                 Task.Run(async () => await AssertHealthy(bunny1)),
                 Task.Run(async () => await AssertUnhealthy(bunny2)));
 
-            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].Properties, messages[2].Body);
             await Task.Delay(700);
             await rabbit2.ConnectContainerToNetwork();
 
@@ -705,7 +705,7 @@ public class SystemTest
                 await channel2.ExchangeDeclareAsync(bunny2.InboundExchange.Name!, ExchangeType.Fanout);
                 var queue2 = await connection2.Consume(bunny2.InboundExchange.Name!, queueName);
 
-                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].properties, messages[0].body);
+                await connection1.Publish(bunny1.OutboundExchange.Name!, messages[0].Properties, messages[0].Body);
 
                 await AssertMessageInQueue(queue2, messages[0], 1);
             }
@@ -714,13 +714,13 @@ public class SystemTest
             await Task.Delay(200);
 
             // Same scenario as StopDeliveryRetryAfterReachingMessageTTL
-            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].properties, messages[1].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[1].Properties, messages[1].Body);
             await Task.WhenAll(
                 Task.Delay(3500),
                 Task.Run(async () => await AssertHealthy(bunny1)),
                 Task.Run(async () => await AssertUnhealthy(bunny2)));
 
-            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].properties, messages[2].body);
+            await connection1.Publish(bunny1.OutboundExchange.Name!, messages[2].Properties, messages[2].Body);
             await Task.Delay(700);
             await rabbit2.ConnectContainerToNetwork();
 
@@ -928,9 +928,9 @@ public class SystemTest
             var response = await httpClient.SendAsync(request);
 
             Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-            var expectedLog = string.IsNullOrEmpty(useKeyIndex) ?
-                "Missing authentication key index in HTTP header 'BunnyBracelet-AuthenticationKeyIndex'." :
-                "Missing authentication key 1.";
+            var expectedLog = string.IsNullOrEmpty(useKeyIndex)
+                ? "Missing authentication key index in HTTP header 'BunnyBracelet-AuthenticationKeyIndex'."
+                : "Missing authentication key 1.";
             await WaitForLogOutput(bunny, expectedLog);
             await AssertHealthy(bunny);
         }
@@ -1328,8 +1328,8 @@ public class SystemTest
     {
         var (properties, body) = await WaitForMessage(queue);
         Assert.IsNotNull(properties, $"Message {index} does not have basic properties.");
-        MessageAssert.ArePropertiesEqual(expectedMessage.properties!, properties);
-        MessageAssert.AreBodiesEqual(expectedMessage.body, body);
+        MessageAssert.ArePropertiesEqual(expectedMessage.Properties!, properties);
+        MessageAssert.AreBodiesEqual(expectedMessage.Body, body);
     }
 
     private static async Task WaitForLogOutput(BunnyRunner bunny, string expectedOutput, TimeSpan? timeout = default)

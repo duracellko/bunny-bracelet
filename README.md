@@ -22,7 +22,7 @@ Single Bunny Bracelet program can relay messages to multiple instances or from m
 
 ## Installation
 
-Bunny Bracelet is natively supported on Linux (x64), Windows (x64) and any platform running [.NET 8.0](https://dotnet.microsoft.com/). Installation is simple. Download and unzip the program specific for your platform.
+Bunny Bracelet is natively supported on Linux (x64), Windows (x64) and any platform running [.NET 10.0](https://dotnet.microsoft.com/). Installation is simple. Download and unzip the program specific for your platform.
 
 ### Requirements
 

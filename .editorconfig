@@ -12,6 +12,7 @@ dotnet_analyzer_diagnostic.category-Style.severity = error
 dotnet_sort_system_directives_first = true
 dotnet_style_prefer_conditional_expression_over_assignment = false
 
+csharp_style_deconstructed_variable_declaration = false
 csharp_style_expression_bodied_methods = when_on_single_line
 csharp_style_expression_bodied_operators = when_on_single_line
 csharp_style_expression_bodied_properties = when_on_single_line

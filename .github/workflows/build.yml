@@ -30,22 +30,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v7
-    - name: Setup .NET 10.0
+    - name: Setup .NET 11.0
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.x
+        dotnet-version: 11.0.x
     - name: Restore
       run: dotnet restore
     - name: Build
       run: dotnet build --configuration Release -p:VersionRevision=${{ github.run_number }} --no-restore --verbosity normal
+    - name: Test (unit tests .NET 11)
+      run: dotnet test ./artifacts/bin/BunnyBracelet.Tests/release_net11.0/BunnyBracelet.Tests.dll --verbosity normal --logger "trx;LogFileName=TestResultsNET11.trx"
     - name: Test (unit tests .NET 10)
       run: dotnet test ./artifacts/bin/BunnyBracelet.Tests/release_net10.0/BunnyBracelet.Tests.dll --verbosity normal --logger "trx;LogFileName=TestResultsNET10.trx"
-    - name: Test (unit tests .NET 8)
-      run: dotnet test ./artifacts/bin/BunnyBracelet.Tests/release_net8.0/BunnyBracelet.Tests.dll --verbosity normal --logger "trx;LogFileName=TestResultsNET8.trx"
+    - name: Publish .NET 11
+      run: dotnet publish --configuration Release --framework net11.0 -p:VersionRevision=${{ github.run_number }} -p:PublishAot=false --verbosity normal
     - name: Publish .NET 10
       run: dotnet publish --configuration Release --framework net10.0 -p:VersionRevision=${{ github.run_number }} -p:PublishAot=false --verbosity normal
-    - name: Publish .NET 8
-      run: dotnet publish --configuration Release --framework net8.0 -p:VersionRevision=${{ github.run_number }} -p:PublishAot=false --verbosity normal
     - name: Publish AOT
       run: |
         $runtime = 'linux-x64'
@@ -53,12 +53,12 @@ jobs:
           $runtime = 'win-x64'
         }
 
-        dotnet publish --configuration Release --framework net10.0 --runtime $runtime -p:VersionRevision=${{ github.run_number }} --verbosity normal
+        dotnet publish --configuration Release --framework net11.0 --runtime $runtime -p:VersionRevision=${{ github.run_number }} --verbosity normal
     - name: Test (system tests)
       run: dotnet test ./artifacts/bin/BunnyBracelet.SystemTests/release/BunnyBracelet.SystemTests.dll --verbosity normal --logger "trx;LogFileName=SystemTestResults.trx"
       if: ${{ runner.os == 'Linux' }}
     - name: Publish container
-      run: dotnet publish /t:PublishContainer --configuration Release --framework net10.0 --runtime linux-x64 -p:VersionRevision=${{ github.run_number }} -p:ContainerArchiveOutputPath=../artifacts/staging/bunny-bracelet-container.tar.gz --verbosity normal
+      run: dotnet publish /t:PublishContainer --configuration Release --framework net11.0 --runtime linux-x64 -p:VersionRevision=${{ github.run_number }} -p:ContainerArchiveOutputPath=../artifacts/staging/bunny-bracelet-container.tar.gz --verbosity normal
       if: ${{ runner.os == 'Linux' }}
     - name: Create artifacts
       run: |
@@ -78,6 +78,19 @@ jobs:
         if (Test-Path -Path $publishBaseDirectory) {
           $publishBaseDirectory = Get-Item -Path $publishBaseDirectory
 
+          # Create BunnyBracelet .NET 11.0 runtime artifact
+          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net11.0'
+          if (Test-Path -Path $publishDirectory) {
+            $stagingDirectory = Join-Path -Path $staging.FullName -ChildPath 'BunnyBracelet-net11'
+            $stagingDirectory = New-Item -Path $stagingDirectory -ItemType Directory
+
+            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($stagingDirectory.FullName)"
+
+            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $stagingDirectory.FullName -Recurse
+            $license | Copy-Item -Destination $stagingDirectory.FullName
+            Get-ChildItem -Path $stagingDirectory.FullName -Recurse
+          }
+
           # Create BunnyBracelet .NET 10.0 runtime artifact
           $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net10.0'
           if (Test-Path -Path $publishDirectory) {
@@ -91,21 +104,8 @@ jobs:
             Get-ChildItem -Path $stagingDirectory.FullName -Recurse
           }
 
-          # Create BunnyBracelet .NET 8.0 runtime artifact
-          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net8.0'
-          if (Test-Path -Path $publishDirectory) {
-            $stagingDirectory = Join-Path -Path $staging.FullName -ChildPath 'BunnyBracelet-net8'
-            $stagingDirectory = New-Item -Path $stagingDirectory -ItemType Directory
-
-            Write-Host "Preparing artifact $($publishDirectory.FullName) -> $($stagingDirectory.FullName)"
-
-            Get-ChildItem -Path $publishDirectory -Exclude $exclude | Copy-Item -Destination $stagingDirectory.FullName -Recurse
-            $license | Copy-Item -Destination $stagingDirectory.FullName
-            Get-ChildItem -Path $stagingDirectory.FullName -Recurse
-          }
-
           # Create BunnyBracelet Linux x64 artifact
-          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net10.0_linux-x64'
+          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net11.0_linux-x64'
           if (Test-Path -Path $publishDirectory) {
             $stagingDirectory = Join-Path -Path $staging.FullName -ChildPath 'BunnyBracelet-linux-x64'
             $stagingDirectory = New-Item -Path $stagingDirectory -ItemType Directory
@@ -118,7 +118,7 @@ jobs:
           }
 
           # Create BunnyBracelet Windows x64 artifact
-          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net10.0_win-x64'
+          $publishDirectory = Join-Path -Path $publishBaseDirectory.FullName -ChildPath 'release_net11.0_win-x64'
           if (Test-Path -Path $publishDirectory) {
             $stagingDirectory = Join-Path -Path $staging.FullName -ChildPath 'BunnyBracelet-win-x64'
             $stagingDirectory = New-Item -Path $stagingDirectory -ItemType Directory
@@ -136,17 +136,17 @@ jobs:
         name: TestResults-${{ runner.os }}
         path: TestResults/*.trx
       if: ${{ !cancelled() }}
+    - name: Publish BunnyBracelet-net11
+      uses: actions/upload-artifact@v7
+      with:
+        name: BunnyBracelet-net11
+        path: artifacts/staging/BunnyBracelet-net11/
+      if: ${{ runner.os == 'Linux' }}
     - name: Publish BunnyBracelet-net10
       uses: actions/upload-artifact@v7
       with:
         name: BunnyBracelet-net10
         path: artifacts/staging/BunnyBracelet-net10/
-      if: ${{ runner.os == 'Linux' }}
-    - name: Publish BunnyBracelet-net8
-      uses: actions/upload-artifact@v7
-      with:
-        name: BunnyBracelet-net8
-        path: artifacts/staging/BunnyBracelet-net8/
       if: ${{ runner.os == 'Linux' }}
     - name: Publish BunnyBracelet-linux-x64
       uses: actions/upload-artifact@v7
@@ -186,8 +186,8 @@ jobs:
       uses: actions/download-artifact@v8
     - name: Create release artifacts
       run: |
+        Compress-Archive -Path './BunnyBracelet-net11/*' -DestinationPath './BunnyBracelet-net11.zip'
         Compress-Archive -Path './BunnyBracelet-net10/*' -DestinationPath './BunnyBracelet-net10.zip'
-        Compress-Archive -Path './BunnyBracelet-net8/*' -DestinationPath './BunnyBracelet-net8.zip'
         Compress-Archive -Path './BunnyBracelet-linux-x64/*' -DestinationPath './BunnyBracelet-linux-x64.zip'
         Compress-Archive -Path './BunnyBracelet-win-x64/*' -DestinationPath './BunnyBracelet-win-x64.zip'
     - name: Get Release version
@@ -218,7 +218,7 @@ jobs:
       with:
         name: ${{ steps.get_release_version.outputs.release_name }}
         draft: true
-        artifacts: "BunnyBracelet-net10.zip,BunnyBracelet-net8.zip,BunnyBracelet-linux-x64.zip,BunnyBracelet-win-x64.zip"
+        artifacts: "BunnyBracelet-net11.zip,BunnyBracelet-net10.zip,BunnyBracelet-linux-x64.zip,BunnyBracelet-win-x64.zip"
         bodyFile: ReleaseBody.md
         tag: ${{ github.ref_type == 'tag' && github.ref_name || steps.get_release_version.outputs.release_tag }}
     - name: Docker login

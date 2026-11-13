@@ -4,7 +4,7 @@ In this tutorial we will setup 2 instances of RabbitMQ. Then we will publish a m
 
 ## Requirements
 
-This tutorial requires that you have downloaded and unzipped Bunny Bracelet program and that you have Docker installed. The downloaded Bunny Bracelet program should be the correct one for your platform. If you use the one that requires .NET runtime, then you should have installed [ASP.NET Core 8.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0).
+This tutorial requires that you have downloaded and unzipped Bunny Bracelet program and that you have Docker installed. The downloaded Bunny Bracelet program should be the correct one for your platform. If you use the one that requires .NET runtime, then you should have installed [ASP.NET Core 10.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 
 ## RabbitMQ setup
 

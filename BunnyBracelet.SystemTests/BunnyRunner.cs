@@ -262,7 +262,7 @@ internal sealed class BunnyRunner : IAsyncDisposable
         path = Path.GetFullPath(path);
 
         var filename = "BunnyBracelet";
-        var pivotBase = Configuration + "_net10.0";
+        var pivotBase = Configuration + "_net11.0";
         var pivot = pivotBase + "_linux-x64";
         if (OperatingSystem.IsWindows())
         {

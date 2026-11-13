@@ -3,7 +3,7 @@ using System.Globalization;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
-using ContainerStatus = (string? id, bool isRunning, bool isConnected);
+using ContainerStatus = (string? Id, bool IsRunning, bool IsConnected);
 
 namespace BunnyBracelet.SystemTests;
 
@@ -21,7 +21,7 @@ namespace BunnyBracelet.SystemTests;
 /// </remarks>
 internal sealed class RabbitRunner : IDisposable
 {
-    private const string Image = "rabbitmq:4.3";
+    private const string Image = "rabbitmq:4.4";
     private const int RabbitMQPort = 5672;
 
     private const string ContainerNamePrefix = "rabbitmq";
@@ -90,19 +90,19 @@ internal sealed class RabbitRunner : IDisposable
             await PullImage();
 
             var containerStatus = await TryGetContainer();
-            if (containerStatus.id is null)
+            if (containerStatus.Id is null)
             {
                 containerStatus = await CreateContainer();
             }
 
-            containerId = containerStatus.id;
+            containerId = containerStatus.Id;
 
-            if (!containerStatus.isConnected)
+            if (!containerStatus.IsConnected)
             {
                 await ConnectContainerToNetwork();
             }
 
-            if (!containerStatus.isRunning)
+            if (!containerStatus.IsRunning)
             {
                 await StartContainer();
             }
@@ -194,9 +194,9 @@ internal sealed class RabbitRunner : IDisposable
     private static DockerClient CreateDockerClient()
     {
         var dockerHost = Environment.GetEnvironmentVariable("DOCKER_HOST");
-        using var configuration = string.IsNullOrEmpty(dockerHost) ?
-            new DockerClientConfiguration() :
-            new DockerClientConfiguration(new Uri(dockerHost));
+        using var configuration = string.IsNullOrEmpty(dockerHost)
+            ? new DockerClientConfiguration()
+            : new DockerClientConfiguration(new Uri(dockerHost));
         return configuration.CreateClient();
     }
 
