@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
 using ByteArray = byte[];
-using TailResult = (byte[] data, byte[] tail);
+using TailResult = (byte[] Data, byte[] Tail);
 
 namespace BunnyBracelet.Tests;
 
@@ -117,10 +117,10 @@ public class ExtendedTailStreamTest
 
         var result = await ExtendTailAsync(data, tailSize);
 
-        Assert.HasCount(dataSize - tailSize, result.data);
-        CollectionAssert.AreEqual(data.SkipLast(tailSize).ToArray(), result.data);
-        Assert.HasCount(tailSize, result.tail);
-        CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.tail);
+        Assert.HasCount(dataSize - tailSize, result.Data);
+        CollectionAssert.AreEqual(data.SkipLast(tailSize).ToArray(), result.Data);
+        Assert.HasCount(tailSize, result.Tail);
+        CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.Tail);
     }
 
     [TestMethod]
@@ -131,9 +131,9 @@ public class ExtendedTailStreamTest
 
         var result = await ExtendTailAsync(data, tailSize);
 
-        Assert.IsEmpty(result.data);
-        Assert.HasCount(tailSize, result.tail);
-        CollectionAssert.AreEqual(data, result.tail.Take(dataSize).ToArray());
+        Assert.IsEmpty(result.Data);
+        Assert.HasCount(tailSize, result.Tail);
+        CollectionAssert.AreEqual(data, result.Tail.Take(dataSize).ToArray());
         AssertBytesAreZero(data, tailSize);
     }
 
@@ -146,9 +146,9 @@ public class ExtendedTailStreamTest
 
         var result = await ExtendTailAsync(data, 0, replaceData);
 
-        Assert.HasCount(dataSize + replaceSize, result.data);
-        CollectionAssert.AreEqual(data.Concat(replaceData).ToArray(), result.data);
-        Assert.IsEmpty(result.tail);
+        Assert.HasCount(dataSize + replaceSize, result.Data);
+        CollectionAssert.AreEqual(data.Concat(replaceData).ToArray(), result.Data);
+        Assert.IsEmpty(result.Tail);
     }
 
     [TestMethod]
@@ -160,10 +160,10 @@ public class ExtendedTailStreamTest
 
         var result = await ExtendTailAsync(data, tailSize, replaceData);
 
-        Assert.HasCount(dataSize - tailSize + replaceSize, result.data);
-        CollectionAssert.AreEqual(data.SkipLast(tailSize).Concat(replaceData).ToArray(), result.data);
-        Assert.HasCount(tailSize, result.tail);
-        CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.tail);
+        Assert.HasCount(dataSize - tailSize + replaceSize, result.Data);
+        CollectionAssert.AreEqual(data.SkipLast(tailSize).Concat(replaceData).ToArray(), result.Data);
+        Assert.HasCount(tailSize, result.Tail);
+        CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.Tail);
     }
 
     [TestMethod]
@@ -207,10 +207,10 @@ public class ExtendedTailStreamTest
 
         var result = ExtendTail(data, tailSize);
 
-        Assert.HasCount(dataSize - tailSize, result.data);
-        CollectionAssert.AreEqual(data.SkipLast(tailSize).ToArray(), result.data);
-        Assert.HasCount(tailSize, result.tail);
-        CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.tail);
+        Assert.HasCount(dataSize - tailSize, result.Data);
+        CollectionAssert.AreEqual(data.SkipLast(tailSize).ToArray(), result.Data);
+        Assert.HasCount(tailSize, result.Tail);
+        CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.Tail);
     }
 
     [TestMethod]
@@ -221,9 +221,9 @@ public class ExtendedTailStreamTest
 
         var result = ExtendTail(data, tailSize);
 
-        Assert.IsEmpty(result.data);
-        Assert.HasCount(tailSize, result.tail);
-        CollectionAssert.AreEqual(data, result.tail.Take(dataSize).ToArray());
+        Assert.IsEmpty(result.Data);
+        Assert.HasCount(tailSize, result.Tail);
+        CollectionAssert.AreEqual(data, result.Tail.Take(dataSize).ToArray());
         AssertBytesAreZero(data, tailSize);
     }
 
@@ -236,9 +236,9 @@ public class ExtendedTailStreamTest
 
         var result = ExtendTail(data, 0, replaceData);
 
-        Assert.HasCount(dataSize + replaceSize, result.data);
-        CollectionAssert.AreEqual(data.Concat(replaceData).ToArray(), result.data);
-        Assert.IsEmpty(result.tail);
+        Assert.HasCount(dataSize + replaceSize, result.Data);
+        CollectionAssert.AreEqual(data.Concat(replaceData).ToArray(), result.Data);
+        Assert.IsEmpty(result.Tail);
     }
 
     [TestMethod]
@@ -250,10 +250,10 @@ public class ExtendedTailStreamTest
 
         var result = ExtendTail(data, tailSize, replaceData);
 
-        Assert.HasCount(dataSize - tailSize + replaceSize, result.data);
-        CollectionAssert.AreEqual(data.SkipLast(tailSize).Concat(replaceData).ToArray(), result.data);
-        Assert.HasCount(tailSize, result.tail);
-        CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.tail);
+        Assert.HasCount(dataSize - tailSize + replaceSize, result.Data);
+        CollectionAssert.AreEqual(data.SkipLast(tailSize).Concat(replaceData).ToArray(), result.Data);
+        Assert.HasCount(tailSize, result.Tail);
+        CollectionAssert.AreEqual(data.TakeLast(tailSize).ToArray(), result.Tail);
     }
 
     [TestMethod]

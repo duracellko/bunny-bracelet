@@ -2,7 +2,7 @@
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-using RabbitMessage = (RabbitMQ.Client.IReadOnlyBasicProperties? properties, byte[] body);
+using RabbitMessage = (RabbitMQ.Client.IReadOnlyBasicProperties? Properties, byte[] Body);
 
 namespace BunnyBracelet.SystemTests;
 
